@@ -1,13 +1,14 @@
 import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
 
 /* ==========================================================================
-   DOM Selectors & Constants
+   DOM Helper & Constants
    ========================================================================== */
 const $ = id => document.getElementById(id);
 const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
 const MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
 const STORAGE_KEY = "focuslens:history_v2";
 const THEME_KEY = "focuslens:theme";
+const VIEW_KEY = "focuslens:view_mode";
 
 // MediaPipe landmark indices for Eyes and Iris
 const LEFT_EYE = [33, 160, 158, 133, 153, 144];
@@ -15,13 +16,11 @@ const RIGHT_EYE = [362, 385, 387, 263, 373, 380];
 const LEFT_IRIS = [468, 469, 470, 471, 472];
 const RIGHT_IRIS = [473, 474, 475, 476, 477];
 const NOSE_TIP = 1;
-const CHIN = 152;
-const FOREHEAD = 10;
 
-// State scoring targets and user messages
+// Scoring target weights and user coaching messages
 const TARGET_SCORES = { focused: 100, distracted: 38, drowsy: 10 };
 const STATE_NAMES = {
-  focused: "Deep Work Flow",
+  focused: "Deep Flow State",
   distracted: "Attention Drifting",
   drowsy: "Fatigue / Eyes Closing"
 };
@@ -50,6 +49,7 @@ let hudEnabled = true;
 let currentAmbientMode = "off";
 let ambientNodes = null;
 let ambientGain = null;
+let currentSprintMinutes = 25;
 let sprintCycleCount = 1;
 let breathInterval = null;
 
@@ -58,7 +58,7 @@ let neutralBase = { yaw: 0, pitch: 0 };
 let smoothedPose = { yaw: 0, pitch: 0, roll: 0 };
 
 /* ==========================================================================
-   Formatting & Utility Helpers
+   Utility & Notification Functions
    ========================================================================== */
 const formatTime = ms => {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
@@ -71,7 +71,7 @@ const formatTime = ms => {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 };
 
-const getSprintDurationMs = () => +$("sprintLen").value * 60000;
+const getSprintDurationMs = () => currentSprintMinutes * 60000;
 
 function showToast(message, duration = 3000) {
   const toast = $("toast");
@@ -83,7 +83,7 @@ function showToast(message, duration = 3000) {
 }
 
 /* ==========================================================================
-   Web Audio API: Procedural Synthesizers (Zero External Files)
+   Web Audio API: Procedural Synthesizers & Soundscapes
    ========================================================================== */
 function initAudio() {
   if (!audioCtx) {
@@ -103,7 +103,7 @@ function playChime(type = "zen") {
 
   const now = audioCtx.currentTime;
   if (type === "zen") {
-    // 528 Hz Solfeggio / Zen Tone with soft harmonic
+    // 528 Hz Solfeggio / Zen Tone with soft harmonic decay
     [528, 1056].forEach((freq, idx) => {
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
@@ -117,7 +117,7 @@ function playChime(type = "zen") {
       osc.stop(now + 1.2);
     });
   } else if (type === "warn") {
-    // Soft descending two-tone warning
+    // Descending soft notification
     [440, 392].forEach((freq, idx) => {
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
@@ -131,7 +131,7 @@ function playChime(type = "zen") {
       osc.stop(now + idx * 0.14 + 0.3);
     });
   } else if (type === "alert") {
-    // Gentle pulse for drowsiness
+    // Drowsiness pulse
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     osc.type = "triangle";
@@ -163,14 +163,6 @@ function setAmbient(mode) {
     el.classList.toggle("active", el.dataset.ambient === mode);
   });
 
-  const labels = {
-    off: "Ambient: Off",
-    binaural: "Ambient: 40Hz Flow",
-    rain: "Ambient: Rain",
-    brown: "Ambient: Brown Noise"
-  };
-  $("ambientLabel").textContent = labels[mode] || "Ambient: Off";
-
   if (mode === "off") return;
 
   initAudio();
@@ -182,13 +174,12 @@ function setAmbient(mode) {
   ambientGain.connect(audioCtx.destination);
 
   if (mode === "binaural") {
-    // 40Hz Gamma Binaural Beat (Left: 216Hz, Right: 256Hz)
+    // 40Hz Gamma Flow (Left: 216Hz, Right: 256Hz)
     const oscL = audioCtx.createOscillator();
     const oscR = audioCtx.createOscillator();
     oscL.frequency.setValueAtTime(216, audioCtx.currentTime);
     oscR.frequency.setValueAtTime(256, audioCtx.currentTime);
 
-    // Stereo Panning
     const panL = audioCtx.createStereoPanner ? audioCtx.createStereoPanner() : null;
     const panR = audioCtx.createStereoPanner ? audioCtx.createStereoPanner() : null;
 
@@ -208,7 +199,6 @@ function setAmbient(mode) {
     oscR.start();
     ambientNodes = [oscL, oscR, ambientGain];
   } else if (mode === "brown" || mode === "rain") {
-    // Buffer noise generator
     const bufferSize = audioCtx.sampleRate * 2;
     const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
     const output = noiseBuffer.getChannelData(0);
@@ -219,9 +209,8 @@ function setAmbient(mode) {
       if (mode === "brown") {
         output[i] = (lastOut + 0.02 * white) / 1.02;
         lastOut = output[i];
-        output[i] *= 3.5; // gain adjustment
+        output[i] *= 3.5;
       } else {
-        // Rain / pink filter
         output[i] = (lastOut + 0.05 * white) / 1.05;
         lastOut = output[i];
         output[i] *= 2.0;
@@ -232,7 +221,6 @@ function setAmbient(mode) {
     whiteNoise.buffer = noiseBuffer;
     whiteNoise.loop = true;
 
-    // Filter
     const filter = audioCtx.createBiquadFilter();
     filter.type = "lowpass";
     filter.frequency.setValueAtTime(mode === "brown" ? 280 : 800, audioCtx.currentTime);
@@ -283,14 +271,13 @@ function createNewSession() {
    Start Camera & MediaPipe Initialization
    ========================================================================== */
 async function startTracking() {
-  $("statusText").textContent = "Loading AI model…";
+  $("statusText").textContent = "Loading AI Vision…";
   $("camBtn").disabled = true;
 
   try {
     initAudio();
     if (!landmarker) {
       const fileset = await FilesetResolver.forVisionTasks(WASM_URL);
-      // Try GPU first, gracefully fallback to CPU if GPU delegate unavailable
       for (const delegate of ["GPU", "CPU"]) {
         try {
           landmarker = await FaceLandmarker.createFromOptions(fileset, {
@@ -320,7 +307,7 @@ async function startTracking() {
     ["calBtn", "endBtn", "csvBtn", "jsonBtn", "shareCardBtn"].forEach(id => $(id).disabled = false);
 
     document.body.dataset.state = "focused";
-    $("statusText").textContent = "Live Tracking";
+    $("statusText").textContent = "Tracking Active";
     playChime("zen");
     showToast("Camera active — tracking started!");
 
@@ -357,7 +344,7 @@ function trackingLoop() {
   let ear = 0;
   let gazeDirection = "Center";
 
-  // Render HUD Overlay
+  // Draw real-time HUD Canvas Overlay
   drawHudOverlay(faceLandmarks, videoEl);
 
   if (!faceLandmarks) {
@@ -365,7 +352,7 @@ function trackingLoop() {
     session.closedDuration = 0;
     session.yawnDuration = 0;
     $("faceTag").textContent = "No Face";
-    $("faceTag").style.color = "var(--color-distracted)";
+    $("faceTag").style.color = "var(--color-drift)";
 
     if (session.noFaceDuration > 1500) {
       calculatedState = "distracted";
@@ -373,7 +360,7 @@ function trackingLoop() {
   } else {
     session.noFaceDuration = 0;
     $("faceTag").textContent = "Face Tracked";
-    $("faceTag").style.color = "var(--color-focused)";
+    $("faceTag").style.color = "var(--color-flow)";
 
     const vW = videoEl.videoWidth || 640;
     const vH = videoEl.videoHeight || 480;
@@ -413,7 +400,6 @@ function trackingLoop() {
         pitch: Math.atan2(-matrix[9], Math.hypot(matrix[8], matrix[10])) * 57.2958,
         roll: Math.atan2(matrix[1], matrix[5]) * 57.2958
       };
-      // Exponential smoothing filter
       smoothedPose.yaw += (rawPose.yaw - smoothedPose.yaw) * 0.35;
       smoothedPose.pitch += (rawPose.pitch - smoothedPose.pitch) * 0.35;
       smoothedPose.roll += (rawPose.roll - smoothedPose.roll) * 0.35;
@@ -434,7 +420,6 @@ function trackingLoop() {
       }
       session.closedDuration = 0;
     }
-    // Retain blinks in the last 60 seconds
     session.blinkTimestamps = session.blinkTimestamps.filter(t => now - t < 60000);
 
     // Yawn Detection (Jaw Opening)
@@ -467,17 +452,17 @@ function trackingLoop() {
     const sessionElapsed = now - session.startTime;
     const bpm = sessionElapsed < 8000 ? null : Math.round((session.blinkTimestamps.length * 60000) / Math.min(60000, sessionElapsed));
     if (bpm !== null) {
-      $("bpmVal").textContent = bpm;
+      $("bpmVal").innerHTML = `${bpm} <small>BPM</small>`;
       const alertTag = $("blinkAlertTag");
       if (bpm < 10) {
         alertTag.textContent = "Low (Strain)";
-        alertTag.className = "metric-pill pill-alert";
+        alertTag.className = "tag-status tag-alert";
       } else if (bpm > 28) {
         alertTag.textContent = "Frequent";
-        alertTag.className = "metric-pill pill-warn";
+        alertTag.className = "tag-status tag-warn";
       } else {
-        alertTag.textContent = "Healthy";
-        alertTag.className = "metric-pill pill-ok";
+        alertTag.textContent = "Normal";
+        alertTag.className = "tag-status tag-ok";
       }
     }
 
@@ -485,16 +470,16 @@ function trackingLoop() {
     const fatigueTag = $("fatigueRisk");
     if (session.yawnsDetected > 3 || session.microsleepCount > 2) {
       fatigueTag.textContent = "High Fatigue";
-      fatigueTag.className = "metric-pill pill-alert";
-      $("fatigueTip").textContent = "Recommend a 5-minute break";
+      fatigueTag.className = "tag-status tag-alert";
+      $("fatigueTip").textContent = "Take a 5-minute break";
     } else if (session.yawnsDetected > 0 || session.microsleepCount > 0) {
       fatigueTag.textContent = "Moderate";
-      fatigueTag.className = "metric-pill pill-warn";
+      fatigueTag.className = "tag-status tag-warn";
       $("fatigueTip").textContent = "Blink frequently and hydrate";
     } else {
       fatigueTag.textContent = "Optimal";
-      fatigueTag.className = "metric-pill pill-ok";
-      $("fatigueTip").textContent = "Energy levels stable";
+      fatigueTag.className = "tag-status tag-ok";
+      $("fatigueTip").textContent = "Alertness stable";
     }
 
     // 3D Head Pose Sliders
@@ -535,7 +520,6 @@ function trackingLoop() {
 
   // Sprint Timer & Pomodoro Logic
   if (now >= session.sprintEndTime && !session.isBreakMode) {
-    // Transition to Guided Break Mode
     triggerBreakMode();
   } else if (!session.isBreakMode) {
     $("sprintTime").textContent = formatTime(session.sprintEndTime - now);
@@ -565,7 +549,7 @@ function trackingLoop() {
   // Sync Body State & Score Dial
   document.body.dataset.state = calculatedState;
   const clampedScore = Math.max(0, Math.min(100, Math.round(session.score)));
-  $("scoreRing").style.strokeDashoffset = 766.5 * (1 - clampedScore / 100);
+  $("scoreRing").style.strokeDashoffset = 816.8 * (1 - clampedScore / 100);
   $("scoreNum").textContent = faceLandmarks || session.noFaceDuration > 1500 ? clampedScore : "–";
   $("stateLabel").textContent = STATE_NAMES[calculatedState];
   $("stateMsg").textContent = !faceLandmarks && session.noFaceDuration > 500
@@ -600,14 +584,13 @@ function drawHudOverlay(landmarks, videoEl) {
   const h = rect.height;
   const stateColor = STATE_COLORS[session?.currentState || "focused"];
 
-  // Helper: map normalized coords to canvas
   const pt = idx => ({ x: landmarks[idx].x * w, y: landmarks[idx].y * h });
 
   // 1. Draw Eye Contours
   [LEFT_EYE, RIGHT_EYE].forEach(eye => {
     ctx.beginPath();
     ctx.strokeStyle = stateColor;
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1.6;
     ctx.globalAlpha = 0.85;
     eye.forEach((idx, i) => {
       const p = pt(idx);
@@ -618,17 +601,16 @@ function drawHudOverlay(landmarks, videoEl) {
     ctx.stroke();
   });
 
-  // 2. Draw Iris Centers and Glowing Reticles
+  // 2. Draw Iris Center Points and Crosshairs
   [LEFT_IRIS[0], RIGHT_IRIS[0]].forEach(irisIdx => {
     if (landmarks[irisIdx]) {
       const p = pt(irisIdx);
       ctx.beginPath();
       ctx.arc(p.x, p.y, 4, 0, 2 * Math.PI);
       ctx.fillStyle = stateColor;
-      ctx.globalAlpha = 0.9;
+      ctx.globalAlpha = 0.95;
       ctx.fill();
 
-      // Iris Crosshair
       ctx.beginPath();
       ctx.strokeStyle = "#FFFFFF";
       ctx.lineWidth = 1;
@@ -656,7 +638,7 @@ function drawHudOverlay(landmarks, videoEl) {
 }
 
 function updateGazeGrid(direction) {
-  document.querySelectorAll(".gaze-cell").forEach(cell => {
+  document.querySelectorAll(".quad-cell").forEach(cell => {
     const isTarget = cell.dataset.dir === direction;
     cell.classList.toggle("active", isTarget);
   });
@@ -670,7 +652,7 @@ function triggerBreakMode() {
   session.isBreakMode = true;
   playChime("zen");
   $("breakSection").hidden = false;
-  $("sprintLabel").textContent = "Recharge Break";
+  $("sprintLabel").textContent = "Restorative Break";
   $("sprintTime").textContent = "05:00";
 
   startBreathingCycle();
@@ -683,9 +665,9 @@ function startBreathingCycle() {
   const stepText = $("breathStep");
 
   const phases = [
-    { name: "Inhale", duration: 4000, cls: "inhale", msg: "Breathe in slowly through your nose for 4s..." },
-    { name: "Hold", duration: 7000, cls: "hold", msg: "Hold your breath calmly for 7s..." },
-    { name: "Exhale", duration: 8000, cls: "exhale", msg: "Exhale smoothly through your mouth for 8s..." }
+    { name: "Inhale", cls: "inhale", msg: "Inhale slowly and quietly through the nose for 4s..." },
+    { name: "Hold", cls: "hold", msg: "Hold your breath calmly for 7s..." },
+    { name: "Exhale", cls: "exhale", msg: "Exhale smoothly through your mouth for 8s..." }
   ];
 
   let currentPhaseIdx = 0;
@@ -694,13 +676,13 @@ function startBreathingCycle() {
     const p = phases[currentPhaseIdx];
     actionText.textContent = p.name;
     stepText.textContent = p.msg;
-    circle.className = `breathing-circle ${p.cls}`;
+    circle.className = `breath-orb ${p.cls}`;
 
     currentPhaseIdx = (currentPhaseIdx + 1) % phases.length;
   }
 
   runPhase();
-  breathInterval = setInterval(runPhase, 19000); // 4 + 7 + 8 = 19 seconds per full box cycle
+  breathInterval = setInterval(runPhase, 19000);
 }
 
 function resumeNextSprint() {
@@ -714,7 +696,7 @@ function resumeNextSprint() {
   $("sprintLabel").textContent = "Focus Sprint";
   $("sprintCycle").textContent = `Cycle #${sprintCycleCount}`;
   playChime("zen");
-  showToast(`Sprint #${sprintCycleCount} initiated!`);
+  showToast(`Sprint #${sprintCycleCount} started!`);
 }
 
 /* ==========================================================================
@@ -736,23 +718,21 @@ function updateSummaryStats() {
   const avg = Math.round(session.scoreSum / Math.max(session.scoreCount, 1));
   $("avgScore").textContent = avg;
 
-  // Grade badge
   const gradeEl = $("avgGrade");
   if (avg >= 88) {
     gradeEl.textContent = "Grade S • Elite Flow";
-    gradeEl.style.color = "var(--color-focused)";
+    gradeEl.style.color = "var(--color-flow)";
   } else if (avg >= 75) {
     gradeEl.textContent = "Grade A • Strong Focus";
-    gradeEl.style.color = "var(--color-focused)";
+    gradeEl.style.color = "var(--color-flow)";
   } else if (avg >= 60) {
-    gradeEl.textContent = "Grade B • Moderate Engagement";
+    gradeEl.textContent = "Grade B • Steady Focus";
     gradeEl.style.color = "var(--color-active)";
   } else {
-    gradeEl.textContent = "Grade C • Needs Re-centering";
-    gradeEl.style.color = "var(--color-distracted)";
+    gradeEl.textContent = "Grade C • Drifting";
+    gradeEl.style.color = "var(--color-drift)";
   }
 
-  // Distribution Bars & Labels
   $("pctFocused").textContent = `${focusedPct}%`;
   $("pctDistracted").textContent = `${distractedPct}%`;
   $("pctDrowsy").textContent = `${drowsyPct}%`;
@@ -763,7 +743,7 @@ function updateSummaryStats() {
 }
 
 /* ==========================================================================
-   High-DPI Interactive Timeline Chart
+   Interactive High-DPI Timeline Chart
    ========================================================================== */
 function renderTimelineChart() {
   const canvas = $("tl");
@@ -783,8 +763,8 @@ function renderTimelineChart() {
 
   const series = session ? session.timelineSeries : [];
 
-  // Subtle horizontal benchmark grid lines (80 for Flow, 40 for Distraction threshold)
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+  // Horizontal threshold grid lines
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.07)";
   ctx.lineWidth = 1;
   [0.8, 0.4].forEach(level => {
     const y = h * (1 - level);
@@ -795,7 +775,7 @@ function renderTimelineChart() {
   });
 
   if (!series.length) {
-    ctx.fillStyle = "#6B7280";
+    ctx.fillStyle = "#64748B";
     ctx.font = "14px Plus Jakarta Sans, sans-serif";
     ctx.fillText("Start your camera to begin live second-by-second focus charting.", 20, h / 2 + 5);
     ctx.restore();
@@ -804,10 +784,9 @@ function renderTimelineChart() {
 
   const barWidth = w / Math.max(series.length, 90);
 
-  // Draw timeline columns with rounded tops & subtle glow
   series.forEach((point, i) => {
     ctx.fillStyle = STATE_COLORS[point.st] || "#10B981";
-    ctx.globalAlpha = 0.82;
+    ctx.globalAlpha = 0.85;
     const barHeight = Math.max(3, (point.s / 100) * (h - 14));
     const x = i * barWidth;
     const y = h - barHeight;
@@ -851,7 +830,7 @@ $("tl").addEventListener("mouseleave", () => {
 function saveCurrentSession() {
   if (!session) return;
   const elapsed = performance.now() - session.startTime;
-  if (elapsed < 10000) return; // Discard tiny sessions < 10s
+  if (elapsed < 10000) return;
 
   try {
     const history = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
@@ -882,7 +861,7 @@ function renderHistoryList() {
 
   const listEl = $("historyList");
   if (!history.length) {
-    listEl.innerHTML = `<li class="history-empty">No previous sessions yet. Completed sessions over 10 seconds are securely saved here on this device.</li>`;
+    listEl.innerHTML = `<li class="history-empty-row">No recorded sessions yet. Completed sessions over 10 seconds are securely saved here on this device.</li>`;
     return;
   }
 
@@ -892,12 +871,12 @@ function renderHistoryList() {
     const grade = item.avgScore >= 85 ? "Grade S" : (item.avgScore >= 70 ? "Grade A" : "Grade B");
 
     return `
-      <li class="history-item">
-        <span class="hist-date">${dateFormatted}</span>
-        <span class="hist-dur">⏱️ ${formatTime(item.duration)}</span>
-        <span class="hist-flow">🔥 ${item.flowPct}% flow</span>
-        <span class="hist-score">Score: ${item.avgScore}</span>
-        <span class="hist-badge">${grade}</span>
+      <li class="history-item-row">
+        <span class="h-date">${dateFormatted}</span>
+        <span class="h-dur">⏱️ ${formatTime(item.duration)}</span>
+        <span class="h-flow">🔥 ${item.flowPct}% flow</span>
+        <span class="h-score">Score: ${item.avgScore}</span>
+        <span class="h-badge">${grade}</span>
       </li>
     `;
   }).join("");
@@ -931,14 +910,14 @@ function stopTracking() {
   session = null;
 
   document.body.dataset.state = "idle";
-  $("statusText").textContent = "Camera off";
+  $("statusText").textContent = "Camera Inactive";
   $("camBtn").disabled = false;
   ["calBtn", "endBtn", "csvBtn", "jsonBtn", "shareCardBtn"].forEach(id => $(id).disabled = true);
 
   $("scoreNum").textContent = "–";
   $("stateLabel").textContent = "Session Finished";
-  $("stateMsg").textContent = "Your session stats have been saved. Click 'Start Focus Session' whenever you're ready.";
-  $("scoreRing").style.strokeDashoffset = 766.5;
+  $("stateMsg").textContent = "Your session stats have been saved. Click 'Start Camera Session' whenever you're ready.";
+  $("scoreRing").style.strokeDashoffset = 816.8;
 
   ["bestStreak", "dmaxVal", "avgScore", "pctFocused", "pctDistracted", "pctDrowsy"].forEach(id => $(id).textContent = "–");
   $("elapsedVal").textContent = "00:00";
@@ -1034,9 +1013,19 @@ function copyShareText() {
 }
 
 /* ==========================================================================
-   Theme Switching & User Preferences
+   View Mode & Theme Configuration
    ========================================================================== */
-function initTheme() {
+function setViewMode(mode) {
+  document.body.dataset.view = mode;
+  $("viewStudioBtn").classList.toggle("active", mode === "studio");
+  $("viewLensBtn").classList.toggle("active", mode === "lens");
+  try {
+    localStorage.setItem(VIEW_KEY, mode);
+  } catch (e) {}
+}
+
+function initThemeAndView() {
+  // Theme
   const savedTheme = localStorage.getItem(THEME_KEY);
   if (savedTheme) {
     document.documentElement.setAttribute("data-theme", savedTheme);
@@ -1044,6 +1033,10 @@ function initTheme() {
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
     document.documentElement.setAttribute("data-theme", prefersDark ? "dark" : "light");
   }
+
+  // View Mode
+  const savedView = localStorage.getItem(VIEW_KEY) || "studio";
+  setViewMode(savedView);
 }
 
 function toggleTheme() {
@@ -1072,8 +1065,12 @@ $("quickCalBtn").addEventListener("click", () => {
 
 $("themeToggle").addEventListener("click", toggleTheme);
 
+// View Mode buttons
+$("viewStudioBtn").addEventListener("click", () => setViewMode("studio"));
+$("viewLensBtn").addEventListener("click", () => setViewMode("lens"));
+
 // Sound FX toggle
-$("sndToggle").addEventListener("click", e => {
+$("sndToggle").addEventListener("click", () => {
   soundFxEnabled = !soundFxEnabled;
   const btn = $("sndToggle");
   btn.setAttribute("aria-pressed", soundFxEnabled);
@@ -1091,41 +1088,42 @@ $("hudToggle").addEventListener("click", () => {
   showToast(hudEnabled ? "AI HUD Mesh visible" : "AI HUD Mesh hidden");
 });
 
-// Ambient dropdown menu
-$("ambientBtn").addEventListener("click", e => {
-  e.stopPropagation();
-  const menu = $("ambientMenu");
-  const isHidden = menu.hidden;
-  menu.hidden = !isHidden;
-  $("ambientBtn").setAttribute("aria-expanded", isHidden);
-});
-
-document.addEventListener("click", e => {
-  if (!$("ambientMenu").contains(e.target) && !$("ambientBtn").contains(e.target)) {
-    $("ambientMenu").hidden = true;
-    $("ambientBtn").setAttribute("aria-expanded", "false");
-  }
-});
-
-document.querySelectorAll("[data-ambient]").forEach(btn => {
+// Ambient soundscape cards
+document.querySelectorAll(".sound-card").forEach(btn => {
   btn.addEventListener("click", () => {
     setAmbient(btn.dataset.ambient);
-    $("ambientMenu").hidden = true;
   });
 });
 
 $("ambientVol").addEventListener("input", e => {
+  const val = e.target.value;
+  $("volPercent").textContent = `${val}%`;
   if (ambientGain && audioCtx) {
-    ambientGain.gain.setValueAtTime((+e.target.value / 100) * 0.15, audioCtx.currentTime);
+    ambientGain.gain.setValueAtTime((+val / 100) * 0.15, audioCtx.currentTime);
   }
 });
 
-// Sprint duration change
-$("sprintLen").addEventListener("change", () => {
-  if (session && !session.isBreakMode) {
-    session.sprintEndTime = performance.now() + getSprintDurationMs();
+// Sprint duration chip selector
+document.querySelectorAll(".chip-btn").forEach(chip => {
+  chip.addEventListener("click", () => {
+    document.querySelectorAll(".chip-btn").forEach(c => c.classList.remove("active"));
+    chip.classList.add("active");
+    currentSprintMinutes = +chip.dataset.len;
+    if (session && !session.isBreakMode) {
+      session.sprintEndTime = performance.now() + getSprintDurationMs();
+    } else {
+      $("sprintTime").textContent = formatTime(getSprintDurationMs());
+    }
+    showToast(`Sprint duration set to ${currentSprintMinutes} minutes`);
+  });
+});
+
+// Quick Break button
+$("quickBreakBtn").addEventListener("click", () => {
+  if (session) {
+    triggerBreakMode();
   } else {
-    $("sprintTime").textContent = formatTime(getSprintDurationMs());
+    showToast("Start a camera session to begin a sprint.");
   }
 });
 
@@ -1150,8 +1148,8 @@ window.addEventListener("resize", () => {
 });
 window.addEventListener("pagehide", saveCurrentSession);
 
-// Startup Initialization
-initTheme();
+// Startup
+initThemeAndView();
 renderHistoryList();
 renderTimelineChart();
 $("sprintTime").textContent = formatTime(getSprintDurationMs());
