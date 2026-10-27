@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Navbar } from './components/Navbar';
+import { Sidebar } from './components/Sidebar';
 import { CameraStage } from './components/CameraStage';
+import { WhoopFocusDial } from './components/WhoopFocusDial';
 import { BiometricsGrid } from './components/BiometricsGrid';
 import { SprintController } from './components/SprintController';
 import { AmbientSoundDeck } from './components/AmbientSoundDeck';
@@ -12,9 +13,23 @@ import { ShareModal } from './components/ShareModal';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { AboutModal } from './components/AboutModal';
 import { SessionSummaryModal } from './components/SessionSummaryModal';
+import { CommandPalette } from './components/CommandPalette';
+import { ThreeHeadVisualizer } from './components/ThreeHeadVisualizer';
 import { useFaceLandmarker } from './hooks/useFaceLandmarker';
 import { playChime, setAmbientSound, updateAmbientVolume } from './utils/audio';
-import { ShieldCheck, Info, Sparkles } from 'lucide-react';
+import {
+  ShieldCheck,
+  Info,
+  Command,
+  Compass,
+  Volume2,
+  VolumeX,
+  Sun,
+  Moon,
+  Eye,
+  Activity,
+  Sparkles
+} from 'lucide-react';
 
 const STORAGE_KEY = 'focuslens:history_v2';
 const THEME_KEY = 'focuslens:theme';
@@ -26,7 +41,8 @@ export function App() {
   const videoRef = useRef(null);
   const hudCanvasRef = useRef(null);
 
-  // App Settings
+  // App Shell & Navigation
+  const [activeTab, setActiveTab] = useState('studio');
   const [theme, setTheme] = useState('dark');
   const [viewMode, setViewMode] = useState('studio');
   const [soundFxEnabled, setSoundFxEnabled] = useState(true);
@@ -50,16 +66,17 @@ export function App() {
   const [bestStreakMs, setBestStreakMs] = useState(0);
   const [maxDistractionMs, setMaxDistractionMs] = useState(0);
 
-  // Modals & Notifications
+  // Modals & Overlays
   const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [sessionSummaryData, setSessionSummaryData] = useState(null);
   const [toast, setToast] = useState(null);
 
-  // Ref tracking for high-frequency loops
+  // Ref tracking for high-frequency processing loops
   const scoreRef = useRef(85);
   const scoreSumRef = useRef(0);
   const scoreCountRef = useRef(0);
@@ -260,7 +277,7 @@ export function App() {
       setIsBreakOpen(false);
 
       if (soundFxEnabled) playChime('start');
-      showToast('Camera active - focus & posture telemetry started!');
+      showToast('Camera active - focus telemetry started!');
     } catch {
       showToast('Camera access blocked. Please allow webcam permission in browser.');
     }
@@ -283,7 +300,7 @@ export function App() {
     const flow = Math.round((timeInState.focused / Math.max(elapsed, 1)) * 100);
     const alignmentPct = totalFramesRef.current > 0
       ? Math.round((alignedFramesRef.current / totalFramesRef.current) * 100)
-      : 85;
+      : 88;
 
     const stats = {
       durationMs: elapsed,
@@ -387,11 +404,18 @@ export function App() {
     showToast('JSON session exported.');
   };
 
-  // Keyboard Shortcuts Listener
+  // Keyboard Shortcuts & Raycast Command Listener
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // Don't trigger if user is interacting with form controls
+      // Don't trigger if user is interacting with form inputs
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+
+      // Raycast launcher: Cmd+K or Ctrl+K
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsCommandPaletteOpen((prev) => !prev);
+        return;
+      }
 
       if (e.code === 'Space') {
         e.preventDefault();
@@ -434,7 +458,7 @@ export function App() {
       } else if (e.key === 't' || e.key === 'T') {
         e.preventDefault();
         toggleTheme();
-      } else if (e.key === '?' || e.key === 'k' || e.key === 'K') {
+      } else if (e.key === '?' || (e.shiftKey && e.key === '/')) {
         e.preventDefault();
         setIsShortcutsOpen((prev) => !prev);
       } else if (e.key === 'Escape') {
@@ -443,6 +467,7 @@ export function App() {
         setIsShortcutsOpen(false);
         setIsAboutOpen(false);
         setIsSummaryOpen(false);
+        setIsCommandPaletteOpen(false);
       }
     };
 
@@ -457,169 +482,314 @@ export function App() {
   };
 
   const currentAvgScore = Math.round(scoreSumRef.current / Math.max(scoreCountRef.current, 1)) || Math.round(score);
+  const currentFlowRatio = Math.round((timeInState.focused / Math.max(elapsedMs, 1)) * 100);
+  const currentAlignmentScore = totalFramesRef.current > 0
+    ? Math.round((alignedFramesRef.current / totalFramesRef.current) * 100)
+    : 88;
+
+  const tabLabels = {
+    studio: 'Live Studio',
+    biometrics: 'Biometrics & Affect',
+    soundscapes: 'Ambient Audio',
+    timeline: 'Telemetry Analytics',
+    archive: 'Session Archive',
+  };
 
   return (
-    <div className="min-h-screen flex flex-col font-sans transition-colors duration-200">
-      <Navbar
+    <div className="flex h-screen w-screen overflow-hidden font-sans select-none">
+      {/* Linear App Shell Sidebar */}
+      <Sidebar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        isTracking={isTracking}
         state={state}
-        viewMode={viewMode}
-        setViewMode={handleSetViewMode}
+        fps={fps}
         soundFxEnabled={soundFxEnabled}
         toggleSoundFx={() => {
           setSoundFxEnabled(!soundFxEnabled);
           showToast(!soundFxEnabled ? 'Auditory alerts enabled' : 'Auditory alerts muted');
-        }}
-        hudEnabled={hudEnabled}
-        toggleHud={() => {
-          setHudEnabled(!hudEnabled);
-          showToast(!hudEnabled ? 'AI HUD mesh visible' : 'AI HUD mesh hidden');
         }}
         theme={theme}
         toggleTheme={toggleTheme}
         onCalibrate={() => {
           recenter();
           if (soundFxEnabled) playChime('calibrate');
-          showToast('Neutral head pose baseline calibrated.');
+          showToast('Neutral head pose calibrated.');
         }}
         onOpenPrivacy={() => setIsPrivacyOpen(true)}
         onOpenShortcuts={() => setIsShortcutsOpen(true)}
+        onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+      />
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col h-full overflow-hidden bg-[var(--bg-primary)]">
+        {/* Linear Header Bar */}
+        <header className="h-12 border-b border-white/5 dark:border-white/5 px-6 flex items-center justify-between shrink-0 bg-[var(--bg-card)] backdrop-blur-md z-20">
+          <div className="flex items-center gap-3 text-xs">
+            <span className="linear-text-muted">FocusLens</span>
+            <span className="linear-text-faint">/</span>
+            <span className="linear-text-heading font-semibold">{tabLabels[activeTab]}</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* View Mode Toggle (Studio / Lens) */}
+            <div className="flex items-center linear-inset rounded-lg p-0.5 text-xs">
+              <button
+                onClick={() => handleSetViewMode('studio')}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                  viewMode === 'studio' ? 'bg-white dark:bg-slate-800 linear-text-heading shadow-sm' : 'linear-text-muted'
+                }`}
+              >
+                Studio
+              </button>
+              <button
+                onClick={() => handleSetViewMode('lens')}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                  viewMode === 'lens' ? 'bg-white dark:bg-slate-800 linear-text-heading shadow-sm' : 'linear-text-muted'
+                }`}
+              >
+                Lens
+              </button>
+            </div>
+
+            {/* AI HUD Toggle */}
+            <button
+              onClick={() => {
+                setHudEnabled(!hudEnabled);
+                showToast(!hudEnabled ? 'AI HUD mesh visible' : 'AI HUD mesh hidden');
+              }}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                hudEnabled
+                  ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-500'
+                  : 'linear-btn-secondary'
+              }`}
+              title="Toggle AI Face &amp; Posture HUD overlay (Press H)"
+            >
+              <Eye className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">HUD</span>
+            </button>
+
+            {/* Recenter Button */}
+            <button
+              onClick={() => {
+                recenter();
+                if (soundFxEnabled) playChime('calibrate');
+                showToast('Neutral head pose calibrated.');
+              }}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg linear-btn-secondary text-xs font-medium"
+              title="Recenter Baseline (Press R)"
+            >
+              <Compass className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="hidden sm:inline">Recenter</span>
+            </button>
+
+            {/* About / System Details */}
+            <button
+              onClick={() => setIsAboutOpen(true)}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg linear-btn-secondary text-xs font-medium"
+              title="About FocusLens Architecture"
+            >
+              <Info className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="hidden md:inline">Docs</span>
+            </button>
+
+            {/* Raycast Trigger */}
+            <button
+              onClick={() => setIsCommandPaletteOpen(true)}
+              className="p-1.5 rounded-lg linear-btn-secondary"
+              title="Open Command Palette (Cmd+K or ?)"
+            >
+              <Command className="w-3.5 h-3.5 linear-text-muted" />
+            </button>
+          </div>
+        </header>
+
+        {/* Dynamic Tab Body */}
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-7 flex flex-col gap-6">
+          {/* TAB 1: LIVE STUDIO (Hero Camera Stage + Whoop Dial + 3D Posture Hologram + Sprint) */}
+          {activeTab === 'studio' && (
+            <div className="flex flex-col gap-6 max-w-7xl w-full mx-auto animate-in fade-in duration-200">
+              {/* Vercel-Style Product Headline & Privacy Banner */}
+              <div className="linear-panel p-4 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm border border-white/5">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-500 shrink-0">
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h1 className="font-display font-bold text-sm linear-text-heading">
+                        FocusLens: Continuous On-Device Cognitive Flow &amp; Ergonomics
+                      </h1>
+                      <span className="px-2 py-0.2 rounded-full text-[9px] font-mono font-bold bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">
+                        Zero Server Telemetry
+                      </span>
+                    </div>
+                    <p className="text-xs linear-text-muted mt-0.5">
+                      Client-side MediaPipe WebAssembly monitors attention dynamics, dry eye blink rates, and 3D head alignment in real time.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => setActiveTab('biometrics')}
+                    className="px-3 py-1.5 rounded-lg linear-btn-secondary text-xs font-semibold"
+                  >
+                    Deep Telemetry &rarr;
+                  </button>
+                </div>
+              </div>
+
+              {/* Cockpit Grid: Hero Camera Stage (7 cols) + Whoop Focus Dial (5 cols) */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+                {/* Hero Camera Viewport */}
+                <div className="lg:col-span-7 flex flex-col gap-4">
+                  <div className="linear-panel p-4 rounded-2xl shadow-xl border border-white/5 h-full flex flex-col justify-between">
+                    <CameraStage
+                      videoRef={videoRef}
+                      hudCanvasRef={hudCanvasRef}
+                      state={state}
+                      viewMode={viewMode}
+                      isTracking={isTracking}
+                      onStartTracking={handleStartTracking}
+                      fps={fps}
+                      isFaceTracked={biometrics.isFaceTracked}
+                      score={score}
+                      alignment={biometrics.alignment}
+                    />
+                  </div>
+                </div>
+
+                {/* Whoop-Style Dominant Focus Score Dial */}
+                <div className="lg:col-span-5 flex flex-col gap-4">
+                  <WhoopFocusDial
+                    score={score}
+                    state={state}
+                    isTracking={isTracking}
+                    streakMs={currentStreakRef.current}
+                    alignmentScore={currentAlignmentScore}
+                    flowRatio={currentFlowRatio}
+                  />
+                </div>
+              </div>
+
+              {/* Sprint Controller & 3D Hologram Stage Row */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+                <div className="lg:col-span-7">
+                  <SprintController
+                    durationMinutes={sprintMins}
+                    setDurationMinutes={handleSprintMinsChange}
+                    timeRemainingFormatted={formatRemaining(timeRemainingMs)}
+                    cycleCount={cycleCount}
+                    isTracking={isTracking}
+                    onQuickBreak={handleQuickBreak}
+                    onEndSession={handleEndSession}
+                    onToggleTracking={handleToggleTracking}
+                  />
+                </div>
+
+                <div className="lg:col-span-5 h-64 lg:h-auto">
+                  <ThreeHeadVisualizer
+                    pose={biometrics.pose}
+                    state={state}
+                    isFaceTracked={biometrics.isFaceTracked}
+                  />
+                </div>
+              </div>
+
+              {/* Guided Break Overlay */}
+              <GuidedBreakModal isOpen={isBreakOpen} onResumeSprint={handleResumeSprint} />
+            </div>
+          )}
+
+          {/* TAB 2: BIOMETRICS & AFFECT */}
+          {activeTab === 'biometrics' && (
+            <div className="max-w-7xl w-full mx-auto flex flex-col gap-5 animate-in fade-in duration-200">
+              <BiometricsGrid
+                biometrics={biometrics}
+                state={state}
+                score={score}
+                onRecenter={() => {
+                  recenter();
+                  if (soundFxEnabled) playChime('calibrate');
+                  showToast('Neutral head pose calibrated.');
+                }}
+              />
+            </div>
+          )}
+
+          {/* TAB 3: AMBIENT SOUNDSCAPES */}
+          {activeTab === 'soundscapes' && (
+            <div className="max-w-7xl w-full mx-auto flex flex-col gap-5 animate-in fade-in duration-200">
+              <AmbientSoundDeck
+                ambientMode={ambientMode}
+                setAmbientMode={handleAmbientChange}
+                volume={ambientVol}
+                setVolume={handleVolumeChange}
+              />
+            </div>
+          )}
+
+          {/* TAB 4: TELEMETRY ANALYTICS & TIMELINE */}
+          {activeTab === 'timeline' && (
+            <div className="max-w-7xl w-full mx-auto flex flex-col gap-5 animate-in fade-in duration-200">
+              <TimelineChart
+                timeline={timeline}
+                elapsedMs={elapsedMs}
+                bestStreakMs={bestStreakMs}
+                maxDistractionMs={maxDistractionMs}
+                avgScore={currentAvgScore}
+                timeInState={timeInState}
+                onExportCsv={handleExportCsv}
+                onExportJson={handleExportJson}
+                onOpenShareCard={() => setIsShareOpen(true)}
+                isTracking={isTracking}
+              />
+            </div>
+          )}
+
+          {/* TAB 5: ARCHIVE & RECORDS */}
+          {activeTab === 'archive' && (
+            <div className="max-w-7xl w-full mx-auto flex flex-col gap-5 animate-in fade-in duration-200">
+              <HistoryArchive history={history} onClearHistory={handleClearHistory} />
+            </div>
+          )}
+        </main>
+      </div>
+
+      {/* Global Modals & Dialogs */}
+      <CommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        isTracking={isTracking}
+        onStartTracking={handleStartTracking}
+        onToggleTracking={handleToggleTracking}
+        onRecenter={() => {
+          recenter();
+          if (soundFxEnabled) playChime('calibrate');
+          showToast('Neutral head pose calibrated.');
+        }}
+        onTakeBreak={handleQuickBreak}
+        onEndSession={handleEndSession}
+        soundFxEnabled={soundFxEnabled}
+        onToggleSound={() => {
+          setSoundFxEnabled(!soundFxEnabled);
+          showToast(!soundFxEnabled ? 'Auditory alerts enabled' : 'Auditory alerts muted');
+        }}
+        hudEnabled={hudEnabled}
+        onToggleHud={() => {
+          setHudEnabled(!hudEnabled);
+          showToast(!hudEnabled ? 'AI HUD mesh visible' : 'AI HUD mesh hidden');
+        }}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        onExportCsv={handleExportCsv}
+        onExportJson={handleExportJson}
+        onOpenShareCard={() => setIsShareOpen(true)}
+        onOpenPrivacy={() => setIsPrivacyOpen(true)}
         onOpenAbout={() => setIsAboutOpen(true)}
       />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex flex-col gap-6">
-        {/* Clarity Overview Banner */}
-        <div className="theme-panel p-4 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm">
-          <div className="flex items-center gap-3.5">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-500 shrink-0">
-              <ShieldCheck className="w-5 h-5" />
-            </div>
-            <div className="flex flex-col">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="font-display font-bold text-sm theme-text-heading">
-                  FocusLens: On-Device Cognitive Flow &amp; Ergonomic Posture Studio
-                </h1>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
-                  100% Private Client-Side
-                </span>
-              </div>
-              <p className="text-xs theme-text-muted mt-0.5">
-                Webcam AI tracks cognitive attention flow, dry eye blink rates, 3D head posture, and facial sentiment in real-time. Video feeds never leave your browser memory.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={() => setIsAboutOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg theme-btn-secondary text-xs font-semibold"
-            >
-              <Info className="w-3.5 h-3.5 text-cyan-500" />
-              <span>How It Works</span>
-            </button>
-            <button
-              onClick={() => setIsShortcutsOpen(true)}
-              className="px-3 py-1.5 rounded-lg theme-btn-secondary text-xs font-semibold font-mono"
-            >
-              Keys [?]
-            </button>
-          </div>
-        </div>
-
-        {/* Top Studio Grid: Camera Stage + Real-Time Biometrics with 3D Hologram */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* Left Column: Camera Stage & Sprint Deck */}
-          <div className="lg:col-span-6 flex flex-col gap-4">
-            <div className="theme-panel p-4 rounded-2xl shadow-sm">
-              <CameraStage
-                videoRef={videoRef}
-                hudCanvasRef={hudCanvasRef}
-                state={state}
-                viewMode={viewMode}
-                isTracking={isTracking}
-                onStartTracking={handleStartTracking}
-                fps={fps}
-                isFaceTracked={biometrics.isFaceTracked}
-                score={score}
-                alignment={biometrics.alignment}
-              />
-            </div>
-
-            <SprintController
-              durationMinutes={sprintMins}
-              setDurationMinutes={handleSprintMinsChange}
-              timeRemainingFormatted={formatRemaining(timeRemainingMs)}
-              cycleCount={cycleCount}
-              isTracking={isTracking}
-              onQuickBreak={handleQuickBreak}
-              onEndSession={handleEndSession}
-              onToggleTracking={handleToggleTracking}
-            />
-          </div>
-
-          {/* Right Column: Biometrics Command Center, Sentiment, & Three.js 3D Hologram */}
-          <div className="lg:col-span-6 flex flex-col gap-4">
-            <BiometricsGrid
-              biometrics={biometrics}
-              state={state}
-              score={score}
-              onRecenter={() => {
-                recenter();
-                if (soundFxEnabled) playChime('calibrate');
-                showToast('Neutral head pose baseline calibrated.');
-              }}
-            />
-          </div>
-        </div>
-
-        {/* Ambient Focus Soundscapes Deck */}
-        <AmbientSoundDeck
-          ambientMode={ambientMode}
-          setAmbientMode={handleAmbientChange}
-          volume={ambientVol}
-          setVolume={handleVolumeChange}
-        />
-
-        {/* Guided Break Overlay */}
-        <GuidedBreakModal isOpen={isBreakOpen} onResumeSprint={handleResumeSprint} />
-
-        {/* Longitudinal Telemetry Timeline & KPI Analytics */}
-        <TimelineChart
-          timeline={timeline}
-          elapsedMs={elapsedMs}
-          bestStreakMs={bestStreakMs}
-          maxDistractionMs={maxDistractionMs}
-          avgScore={currentAvgScore}
-          timeInState={timeInState}
-          onExportCsv={handleExportCsv}
-          onExportJson={handleExportJson}
-          onOpenShareCard={() => setIsShareOpen(true)}
-          isTracking={isTracking}
-        />
-
-        {/* Historical Archive */}
-        <HistoryArchive history={history} onClearHistory={handleClearHistory} />
-      </main>
-
-      {/* Footer */}
-      <footer className="border-t border-slate-200 dark:border-slate-800/80 px-6 py-4 flex flex-col sm:flex-row items-center justify-between text-xs theme-text-muted gap-3">
-        <div className="flex items-center gap-2">
-          <span>Zero-Knowledge Privacy: All MediaPipe AI inference executes 100% locally on your device.</span>
-        </div>
-        <div className="flex items-center gap-4 theme-text-body">
-          <span>FocusLens React + 3D Studio</span>
-          <span>-</span>
-          <a
-            href="https://github.com/Ak-arsha/focuslens"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hover:text-emerald-500 transition-colors"
-          >
-            GitHub Repository
-          </a>
-        </div>
-      </footer>
-
-      {/* Modals */}
       <PrivacyModal isOpen={isPrivacyOpen} onClose={() => setIsPrivacyOpen(false)} />
       <AboutModal isOpen={isAboutOpen} onClose={() => setIsAboutOpen(false)} />
       <KeyboardShortcutsModal isOpen={isShortcutsOpen} onClose={() => setIsShortcutsOpen(false)} />
@@ -653,7 +823,7 @@ export function App() {
 
       {/* Toast Notification */}
       {toast && (
-        <div className="fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-lg theme-panel shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-3 duration-200 text-xs font-semibold theme-text-heading border">
+        <div className="fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-lg linear-panel shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-3 duration-200 text-xs font-semibold linear-text-heading border border-white/10">
           {toast}
         </div>
       )}

@@ -2,91 +2,143 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Linear + Vercel + Whoop Theme Tokens */
 :root, html[data-theme="dark"], html.dark {
   color-scheme: dark;
-  --bg-primary: #020617;
-  --bg-card: rgba(15, 23, 42, 0.7);
-  --bg-card-hover: rgba(30, 41, 59, 0.7);
-  --bg-elevated: #090e1a;
-  --bg-inset: #020617;
-  --border-subtle: rgba(51, 65, 85, 0.6);
-  --border-strong: rgba(71, 85, 105, 0.8);
+  --bg-primary: #07090e;      /* Deep obsidian background */
+  --bg-sidebar: #0a0d14;      /* Linear sidebar neutral */
+  --bg-card: rgba(14, 18, 27, 0.75); /* Translucent cockpit card */
+  --bg-card-hover: rgba(22, 28, 42, 0.85);
+  --bg-card-solid: #0d121c;
+  --bg-elevated: #111827;
+  --bg-inset: #05070a;        /* Deep recessed surface */
+  --border-subtle: rgba(255, 255, 255, 0.07); /* Linear 1px hairline border */
+  --border-strong: rgba(255, 255, 255, 0.15);
+  --border-accent: rgba(16, 185, 129, 0.3);
   --text-heading: #f8fafc;
   --text-body: #cbd5e1;
-  --text-muted: #94a3b8;
-  --text-faint: #64748b;
-  --hud-overlay: rgba(2, 6, 23, 0.95);
+  --text-muted: #8b9bb4;
+  --text-faint: #475569;
+  --hud-overlay: rgba(7, 9, 14, 0.95);
+  --accent-glow: rgba(16, 185, 129, 0.15);
 }
 
 html[data-theme="light"], html.light {
   color-scheme: light;
-  --bg-primary: #f1f5f9;
-  --bg-card: rgba(255, 255, 255, 0.9);
+  --bg-primary: #f8fafc;
+  --bg-sidebar: #f1f5f9;
+  --bg-card: rgba(255, 255, 255, 0.92);
   --bg-card-hover: rgba(248, 250, 252, 1);
+  --bg-card-solid: #ffffff;
   --bg-elevated: #ffffff;
-  --bg-inset: #e2e8f0;
-  --border-subtle: rgba(203, 213, 225, 0.9);
-  --border-strong: rgba(148, 163, 184, 0.8);
+  --bg-inset: #f1f5f9;
+  --border-subtle: rgba(226, 232, 240, 0.9);
+  --border-strong: rgba(203, 213, 225, 0.9);
+  --border-accent: rgba(16, 185, 129, 0.4);
   --text-heading: #0f172a;
   --text-body: #334155;
   --text-muted: #64748b;
   --text-faint: #94a3b8;
   --hud-overlay: rgba(248, 250, 252, 0.95);
+  --accent-glow: rgba(16, 185, 129, 0.08);
 }
 
 body {
   background-color: var(--bg-primary);
   color: var(--text-heading);
-  transition: background-color 0.25s ease, color 0.25s ease;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  transition: background-color 0.2s ease, color 0.2s ease;
+  overflow-x: hidden;
 }
 
-/* Reusable Theme Card & Panel Utilities */
-.theme-panel {
+/* Linear-Style Card & Inset Surfaces */
+.linear-panel {
   background-color: var(--bg-card);
   border: 1px solid var(--border-subtle);
   color: var(--text-heading);
-  backdrop-filter: blur(12px);
-  transition: background-color 0.25s ease, border-color 0.25s ease;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.theme-inset {
+.linear-panel:hover {
+  border-color: var(--border-strong);
+}
+
+.linear-card-solid {
+  background-color: var(--bg-card-solid);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-heading);
+}
+
+.linear-inset {
   background-color: var(--bg-inset);
   border: 1px solid var(--border-subtle);
-  transition: background-color 0.25s ease, border-color 0.25s ease;
 }
 
-.theme-btn-secondary {
+.linear-btn-secondary {
   background-color: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
   color: var(--text-body);
-  transition: all 0.15s ease;
+  transition: all 0.12s ease;
 }
-.theme-btn-secondary:hover {
+.linear-btn-secondary:hover {
   background-color: var(--bg-card-hover);
   color: var(--text-heading);
   border-color: var(--border-strong);
 }
 
-.theme-text-heading {
+.linear-btn-ghost {
+  color: var(--text-muted);
+  transition: all 0.12s ease;
+}
+.linear-btn-ghost:hover {
+  background-color: var(--bg-card-hover);
   color: var(--text-heading);
 }
 
-.theme-text-body {
+.linear-active-tab {
+  background-color: var(--bg-card-hover);
+  color: var(--text-heading);
+  border: 1px solid var(--border-subtle);
+}
+
+.linear-text-heading {
+  color: var(--text-heading);
+}
+
+.linear-text-body {
   color: var(--text-body);
 }
 
-.theme-text-muted {
+.linear-text-muted {
   color: var(--text-muted);
 }
 
-.theme-text-faint {
+.linear-text-faint {
   color: var(--text-faint);
 }
 
-/* Custom Scrollbars */
+/* Tabular figures for telemetry numbers */
+.num-mono {
+  font-family: 'JetBrains Mono', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Whoop Glowing Strain/Recovery Dial Animation */
+@keyframes ring-glow {
+  0%, 100% { opacity: 0.85; filter: drop-shadow(0 0 10px rgba(16, 185, 129, 0.4)); }
+  50% { opacity: 1; filter: drop-shadow(0 0 18px rgba(16, 185, 129, 0.7)); }
+}
+
+.whoop-dial-glow {
+  animation: ring-glow 4s ease-in-out infinite;
+}
+
+/* Custom Sleek Scrollbars */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
