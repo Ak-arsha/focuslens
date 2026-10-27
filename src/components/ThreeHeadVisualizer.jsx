@@ -75,17 +75,17 @@ export const ThreeHeadVisualizer = ({ pose, state, isFaceTracked }) => {
       color: getColor(state),
       wireframe: true,
       transparent: true,
-      opacity: 0.75
+      opacity: 0.8
     });
     const headMesh = new THREE.Mesh(headGeo, wireframeMat);
     headGroup.add(headMesh);
 
     // 2. Glowing Nodes at Vertices
     const pointsMat = new THREE.PointsMaterial({
-      color: 0xFFFFFF,
+      color: 0x06B6D4,
       size: 0.045,
       transparent: true,
-      opacity: 0.85
+      opacity: 0.9
     });
     const pointsMesh = new THREE.Points(headGeo, pointsMat);
     headGroup.add(pointsMesh);
@@ -93,10 +93,10 @@ export const ThreeHeadVisualizer = ({ pose, state, isFaceTracked }) => {
     // 3. Eye Sockets Reticles
     const eyeRingGeo = new THREE.RingGeometry(0.12, 0.16, 16);
     const eyeMat = new THREE.MeshBasicMaterial({
-      color: 0xFFFFFF,
+      color: 0x10B981,
       side: THREE.DoubleSide,
       transparent: true,
-      opacity: 0.9
+      opacity: 0.95
     });
 
     const leftEye = new THREE.Mesh(eyeRingGeo, eyeMat);
@@ -110,26 +110,26 @@ export const ThreeHeadVisualizer = ({ pose, state, isFaceTracked }) => {
     // 4. Directional Forward Aim Pointer Ray
     const pointerGeo = new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(0, 0, 1.1),
-      new THREE.Vector3(0, 0, 1.8)
+      new THREE.Vector3(0, 0, 1.9)
     ]);
     const pointerMat = new THREE.LineBasicMaterial({
       color: 0x06B6D4,
       linewidth: 2,
       transparent: true,
-      opacity: 0.8
+      opacity: 0.85
     });
     const pointerLine = new THREE.Line(pointerGeo, pointerMat);
     headGroup.add(pointerLine);
 
-    // 5. Orbital Orientation Gyro Rings (Stationary Horizon reference)
+    // 5. Stationary Horizon Reference Ring (Alignment baseline)
     const gyroGroup = new THREE.Group();
     scene.add(gyroGroup);
 
     const ringGeo = new THREE.TorusGeometry(1.65, 0.012, 8, 48);
     const ringMat = new THREE.MeshBasicMaterial({
-      color: 0x334155,
+      color: 0x06B6D4,
       transparent: true,
-      opacity: 0.4
+      opacity: 0.35
     });
     const horizonRing = new THREE.Mesh(ringGeo, ringMat);
     horizonRing.rotation.x = Math.PI / 2;
@@ -187,15 +187,15 @@ export const ThreeHeadVisualizer = ({ pose, state, isFaceTracked }) => {
   }, [state]);
 
   return (
-    <div className="relative w-full h-full flex flex-col items-center justify-center bg-slate-900/60 rounded-xl border border-slate-800/80 p-2 overflow-hidden">
+    <div className="theme-panel relative w-full h-full flex flex-col items-center justify-center rounded-xl p-2 overflow-hidden">
       <div className="absolute top-2 left-3 flex items-center gap-1.5 z-10 pointer-events-none">
         <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-        <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-semibold">
+        <span className="text-[10px] font-mono uppercase tracking-wider theme-text-muted font-semibold">
           3D Posture Hologram
         </span>
       </div>
       <div ref={mountRef} className="w-full h-44 cursor-grab active:cursor-grabbing" />
-      <div className="absolute bottom-2 inset-x-3 flex justify-between items-center text-[10px] font-mono text-slate-400 pointer-events-none">
+      <div className="absolute bottom-2 inset-x-3 flex justify-between items-center text-[10px] font-mono theme-text-muted pointer-events-none">
         <span>Yaw: {Math.round(pose.yaw)}&deg;</span>
         <span>Pitch: {Math.round(pose.pitch)}&deg;</span>
         <span>Roll: {Math.round(pose.roll)}&deg;</span>
