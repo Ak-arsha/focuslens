@@ -1,20 +1,19 @@
 import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 
-export const ThreeHeadVisualizer = ({ pose, state, isFaceTracked }) => {
+export const ThreeHeadVisualizer = ({ pose = { yaw: 0, pitch: 0, roll: 0 }, state = 'idle', isFaceTracked = false }) => {
   const mountRef = useRef(null);
   const targetRotation = useRef({ yaw: 0, pitch: 0, roll: 0 });
 
   // Update target rotations in radians
   useEffect(() => {
-    if (isFaceTracked) {
+    if (isFaceTracked && pose) {
       targetRotation.current = {
-        yaw: (pose.yaw * Math.PI) / 180,
-        pitch: (pose.pitch * Math.PI) / 180,
-        roll: (-pose.roll * Math.PI) / 180
+        yaw: ((pose.yaw ?? 0) * Math.PI) / 180,
+        pitch: ((pose.pitch ?? 0) * Math.PI) / 180,
+        roll: (-(pose.roll ?? 0) * Math.PI) / 180
       };
     } else {
-      // gentle idle rotation when no face is tracked
       targetRotation.current = { yaw: 0, pitch: 0, roll: 0 };
     }
   }, [pose, isFaceTracked]);
@@ -23,8 +22,8 @@ export const ThreeHeadVisualizer = ({ pose, state, isFaceTracked }) => {
     const container = mountRef.current;
     if (!container) return;
 
-    const width = container.clientWidth || 240;
-    const height = container.clientHeight || 200;
+    const width = container.clientWidth || 280;
+    const height = container.clientHeight || 190;
 
     // Scene, Camera, Renderer
     const scene = new THREE.Scene();
@@ -36,7 +35,7 @@ export const ThreeHeadVisualizer = ({ pose, state, isFaceTracked }) => {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     container.appendChild(renderer.domElement);
 
-    // Dynamic Color Mapping
+    // Dynamic Color Mapping based on cognitive flow state
     const getColor = (s) => {
       switch (s) {
         case 'focused': return new THREE.Color(0x10B981);
@@ -52,14 +51,12 @@ export const ThreeHeadVisualizer = ({ pose, state, isFaceTracked }) => {
 
     // 1. Procedural Low-Poly Cybernetic Head Mesh
     const headGeo = new THREE.IcosahedronGeometry(1.2, 2);
-    // Deform vertices slightly to resemble an anatomical skull/face
     const pos = headGeo.attributes.position;
     for (let i = 0; i < pos.count; i++) {
       let x = pos.getX(i);
       let y = pos.getY(i);
       let z = pos.getZ(i);
 
-      // Elongate skull vertically and taper jaw
       if (y < -0.2) {
         x *= 0.78; // jaw taper
         z *= 0.85;
@@ -100,72 +97,58 @@ export const ThreeHeadVisualizer = ({ pose, state, isFaceTracked }) => {
     });
 
     const leftEye = new THREE.Mesh(eyeRingGeo, eyeMat);
-    leftEye.position.set(-0.38, 0.18, 0.98);
+    leftEye.position.set(-0.38, 0.18, 1.05);
     headGroup.add(leftEye);
 
     const rightEye = new THREE.Mesh(eyeRingGeo, eyeMat);
-    rightEye.position.set(0.38, 0.18, 0.98);
+    rightEye.position.set(0.38, 0.18, 1.05);
     headGroup.add(rightEye);
 
-    // 4. Directional Forward Aim Pointer Ray
-    const pointerGeo = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(0, 0, 1.1),
-      new THREE.Vector3(0, 0, 1.9)
-    ]);
-    const pointerMat = new THREE.LineBasicMaterial({
-      color: 0x06B6D4,
-      linewidth: 2,
+    // 4. Stable Horizon Reference Gimbal Ring
+    const horizonGeo = new THREE.RingGeometry(1.65, 1.68, 48);
+    const horizonMat = new THREE.MeshBasicMaterial({
+      color: 0x334155,
+      side: THREE.DoubleSide,
       transparent: true,
-      opacity: 0.85
+      opacity: 0.45
     });
-    const pointerLine = new THREE.Line(pointerGeo, pointerMat);
-    headGroup.add(pointerLine);
-
-    // 5. Stationary Horizon Reference Ring (Alignment baseline)
-    const gyroGroup = new THREE.Group();
-    scene.add(gyroGroup);
-
-    const ringGeo = new THREE.TorusGeometry(1.65, 0.012, 8, 48);
-    const ringMat = new THREE.MeshBasicMaterial({
-      color: 0x06B6D4,
-      transparent: true,
-      opacity: 0.35
-    });
-    const horizonRing = new THREE.Mesh(ringGeo, ringMat);
+    const horizonRing = new THREE.Mesh(horizonGeo, horizonMat);
     horizonRing.rotation.x = Math.PI / 2;
-    gyroGroup.add(horizonRing);
+    scene.add(horizonRing);
 
-    // Animation Loop with smooth interpolation (lerp)
+    // Subtle Ambient Light
+    const ambLight = new THREE.AmbientLight(0xffffff, 0.8);
+    scene.add(ambLight);
+
+    // Animation Render Loop with SLERP-like easing
     let animationFrameId;
-    let clock = new THREE.Clock();
+    const currentRot = { yaw: 0, pitch: 0, roll: 0 };
 
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);
-      const delta = clock.getDelta();
 
-      // Smoothly interpolate rotations
-      headGroup.rotation.y = THREE.MathUtils.lerp(headGroup.rotation.y, targetRotation.current.yaw, delta * 9);
-      headGroup.rotation.x = THREE.MathUtils.lerp(headGroup.rotation.x, targetRotation.current.pitch, delta * 9);
-      headGroup.rotation.z = THREE.MathUtils.lerp(headGroup.rotation.z, targetRotation.current.roll, delta * 9);
+      // Smooth interpolation toward target rotation
+      const ease = 0.12;
+      currentRot.yaw += (targetRotation.current.yaw - currentRot.yaw) * ease;
+      currentRot.pitch += (targetRotation.current.pitch - currentRot.pitch) * ease;
+      currentRot.roll += (targetRotation.current.roll - currentRot.roll) * ease;
 
-      // Subtle float oscillation if idle
-      if (!isFaceTracked) {
-        headGroup.rotation.y = Math.sin(clock.getElapsedTime() * 0.8) * 0.15;
-      }
+      headGroup.rotation.y = currentRot.yaw;
+      headGroup.rotation.x = currentRot.pitch;
+      headGroup.rotation.z = currentRot.roll;
 
-      // Update color matching active state
-      wireframeMat.color.lerp(getColor(state), delta * 5);
+      // Color pulse based on tracking
+      wireframeMat.color = getColor(state);
 
       renderer.render(scene, camera);
     };
 
     animate();
 
-    // Handle container resize
     const handleResize = () => {
       if (!container) return;
-      const w = container.clientWidth || 240;
-      const h = container.clientHeight || 200;
+      const w = container.clientWidth;
+      const h = container.clientHeight;
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
@@ -182,23 +165,25 @@ export const ThreeHeadVisualizer = ({ pose, state, isFaceTracked }) => {
       headGeo.dispose();
       wireframeMat.dispose();
       pointsMat.dispose();
+      eyeRingGeo.dispose();
+      eyeMat.dispose();
+      horizonGeo.dispose();
+      horizonMat.dispose();
       renderer.dispose();
     };
   }, [state]);
 
+  const safeYaw = Math.round(pose?.yaw ?? 0);
+  const safePitch = Math.round(pose?.pitch ?? 0);
+  const safeRoll = Math.round(pose?.roll ?? 0);
+
   return (
-    <div className="theme-panel relative w-full h-full flex flex-col items-center justify-center rounded-xl p-2 overflow-hidden">
-      <div className="absolute top-2 left-3 flex items-center gap-1.5 z-10 pointer-events-none">
-        <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-        <span className="text-[10px] font-mono uppercase tracking-wider theme-text-muted font-semibold">
-          3D Posture Hologram
-        </span>
-      </div>
-      <div ref={mountRef} className="w-full h-44 cursor-grab active:cursor-grabbing" />
-      <div className="absolute bottom-2 inset-x-3 flex justify-between items-center text-[10px] font-mono theme-text-muted pointer-events-none">
-        <span>Yaw: {Math.round(pose.yaw)}&deg;</span>
-        <span>Pitch: {Math.round(pose.pitch)}&deg;</span>
-        <span>Roll: {Math.round(pose.roll)}&deg;</span>
+    <div className="relative w-full h-full flex flex-col items-center justify-center overflow-hidden select-none">
+      <div ref={mountRef} className="w-full h-full cursor-grab active:cursor-grabbing" />
+      <div className="absolute bottom-2 inset-x-3 flex justify-between items-center text-[10px] font-mono linear-text-muted pointer-events-none bg-black/40 backdrop-blur-sm px-2 py-0.5 rounded-md border border-white/5">
+        <span>Yaw: <strong className={Math.abs(safeYaw) > 14 ? 'text-amber-400' : 'text-emerald-400'}>{safeYaw}&deg;</strong></span>
+        <span>Pitch: <strong className={Math.abs(safePitch) > 12 ? 'text-amber-400' : 'text-emerald-400'}>{safePitch}&deg;</strong></span>
+        <span>Roll: <strong className={Math.abs(safeRoll) > 10 ? 'text-amber-400' : 'text-emerald-400'}>{safeRoll}&deg;</strong></span>
       </div>
     </div>
   );

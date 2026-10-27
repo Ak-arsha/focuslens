@@ -8,6 +8,7 @@ import { SessionSummaryModal } from './components/SessionSummaryModal';
 import { PrivacyModal } from './components/PrivacyModal';
 import { HistoryArchive } from './components/HistoryArchive';
 import { useFaceLandmarker } from './hooks/useFaceLandmarker';
+import { ThreeHeadVisualizer } from './components/ThreeHeadVisualizer';
 import { playChime } from './utils/audio';
 import { saveSessionToDB, getAllSessionsFromDB, deleteSessionFromDB } from './utils/db';
 import {
@@ -23,7 +24,8 @@ import {
   X,
   Play,
   Pause,
-  Activity
+  Activity,
+  Box
 } from 'lucide-react';
 
 const THEME_KEY = 'focuslens:theme';
@@ -573,6 +575,49 @@ export function App() {
                 pose={biometrics.pose}
               />
             </div>
+
+            {/* 3D Posture Hologram Card (Placed directly beneath the camera) */}
+            <div className="linear-panel p-4 rounded-2xl shadow-lg border border-white/5 flex flex-col gap-2">
+              <div className="flex items-center justify-between pb-2 border-b border-white/5">
+                <div className="flex items-center gap-2">
+                  <Box className="w-4 h-4 text-cyan-400" />
+                  <span className="font-display font-bold text-xs uppercase tracking-wider linear-text-heading">
+                    3D Cervical Spine Hologram
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                    WebGL Real-Time
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-3 text-xs">
+                  <div className="flex items-center gap-2 font-mono text-[11px] linear-text-muted">
+                    <span>Y: <b className="linear-text-heading">{biometrics.pose?.yaw ?? 0}&deg;</b></span>
+                    <span>P: <b className="linear-text-heading">{biometrics.pose?.pitch ?? 0}&deg;</b></span>
+                    <span>R: <b className="linear-text-heading">{biometrics.pose?.roll ?? 0}&deg;</b></span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      recenter();
+                      if (soundFxEnabled) playChime('calibrate');
+                      showToast('Neutral posture calibrated.');
+                    }}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20"
+                    title="Recenter Baseline (Press R)"
+                  >
+                    <Compass className="w-3 h-3" />
+                    <span>Recenter</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="w-full h-48 relative overflow-hidden rounded-xl linear-inset">
+                <ThreeHeadVisualizer
+                  pose={biometrics.pose}
+                  state={state}
+                  isFaceTracked={biometrics.isFaceTracked}
+                />
+              </div>
+            </div>
           </div>
 
           {/* Right Column: Dominant Whoop Focus Score Dial + Core Biometrics Stack */}
@@ -675,6 +720,49 @@ export function App() {
                   }
                 }}
               />
+            </div>
+
+            {/* 3D Posture Hologram Card (Placed directly beneath the camera) */}
+            <div className="linear-panel p-4 rounded-2xl shadow-lg border border-white/5 flex flex-col gap-2">
+              <div className="flex items-center justify-between pb-2 border-b border-white/5">
+                <div className="flex items-center gap-2">
+                  <Box className="w-4 h-4 text-cyan-400" />
+                  <span className="font-display font-bold text-xs uppercase tracking-wider linear-text-heading">
+                    3D Cervical Spine Hologram
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                    WebGL Real-Time
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-3 text-xs">
+                  <div className="flex items-center gap-2 font-mono text-[11px] linear-text-muted">
+                    <span>Y: <b className="linear-text-heading">{biometrics.pose?.yaw ?? 0}&deg;</b></span>
+                    <span>P: <b className="linear-text-heading">{biometrics.pose?.pitch ?? 0}&deg;</b></span>
+                    <span>R: <b className="linear-text-heading">{biometrics.pose?.roll ?? 0}&deg;</b></span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      recenter();
+                      if (soundFxEnabled) playChime('calibrate');
+                      showToast('Neutral posture calibrated.');
+                    }}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20"
+                    title="Recenter Baseline (Press R)"
+                  >
+                    <Compass className="w-3 h-3" />
+                    <span>Recenter</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="w-full h-48 relative overflow-hidden rounded-xl linear-inset">
+                <ThreeHeadVisualizer
+                  pose={biometrics.pose}
+                  state={state}
+                  isFaceTracked={biometrics.isFaceTracked}
+                />
+              </div>
             </div>
           </div>
         </div>
