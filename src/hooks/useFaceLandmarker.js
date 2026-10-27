@@ -9,6 +9,10 @@ const RIGHT_EYE = [362, 385, 387, 263, 373, 380];
 const LEFT_IRIS = [468, 469, 470, 471, 472];
 const RIGHT_IRIS = [473, 474, 475, 476, 477];
 const NOSE_TIP = 1;
+const CHIN = 152;
+const FOREHEAD = 10;
+const LEFT_EAR_TRAGUS = 234;
+const RIGHT_EAR_TRAGUS = 454;
 
 export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTick) {
   const [isReady, setIsReady] = useState(false);
@@ -21,6 +25,7 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
 
   const neutralBase = useRef({ yaw: 0, pitch: 0 });
   const smoothedPose = useRef({ yaw: 0, pitch: 0, roll: 0 });
+  const smoothedSentiment = useRef({ valence: 50, smile: 0, stress: 0, focus: 80, strain: 0 });
 
   // Biometrics State
   const [biometrics, setBiometrics] = useState({
@@ -30,6 +35,20 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
     yawnsDetected: 0,
     microsleepCount: 0,
     pose: { yaw: 0, pitch: 0, roll: 0 },
+    alignment: {
+      isAligned: false,
+      yawDeviation: 0,
+      pitchDeviation: 0,
+      rollDeviation: 0,
+      status: 'Standby',
+      cue: 'Align face with target frame'
+    },
+    sentiment: {
+      label: 'Calm Focus',
+      valence: 60,
+      scores: { calm: 80, smile: 0, focus: 75, stress: 10, strain: 5 },
+      description: 'Relaxed facial tone in steady flow state'
+    },
     isFaceTracked: false,
     fps: 0,
   });
@@ -84,7 +103,7 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
   }, []);
 
   const drawHud = useCallback(
-    (landmarks, video) => {
+    (landmarks, isAligned, yawDev, pitchDev) => {
       const canvas = hudCanvasRef.current;
       if (!canvas || !hudEnabled || !landmarks) {
         if (canvas) {
@@ -112,12 +131,87 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
       const h = rect.height;
       const pt = (idx) => ({ x: landmarks[idx].x * w, y: landmarks[idx].y * h });
 
-      // Eye Contours
-      [LEFT_EYE, RIGHT_EYE].forEach((eye) => {
+      const alignColor = isAligned ? '#10B981' : '#F59E0B';
+
+      // 1. CLEAR POSTURE ALIGNMENT GUIDELINES
+      // A. Center Vertical Plumb Axis Line (Forehead -> Chin)
+      if (landmarks[FOREHEAD] && landmarks[CHIN]) {
+        const top = pt(FOREHEAD);
+        const bot = pt(CHIN);
+
         ctx.beginPath();
-        ctx.strokeStyle = '#10B981';
+        ctx.strokeStyle = alignColor;
+        ctx.lineWidth = 2;
+        ctx.setLineDash(isAligned ? [] : [6, 4]);
+        ctx.globalAlpha = 0.85;
+        ctx.moveTo(top.x, top.y - 20);
+        ctx.lineTo(bot.x, bot.y + 20);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // B. Horizontal Eye Horizon Level Line
+      if (landmarks[LEFT_EAR_TRAGUS] && landmarks[RIGHT_EAR_TRAGUS]) {
+        const leftEar = pt(LEFT_EAR_TRAGUS);
+        const rightEar = pt(RIGHT_EAR_TRAGUS);
+
+        ctx.beginPath();
+        ctx.strokeStyle = alignColor;
+        ctx.lineWidth = 1.5;
+        ctx.globalAlpha = 0.7;
+        ctx.moveTo(leftEar.x, leftEar.y);
+        ctx.lineTo(rightEar.x, rightEar.y);
+        ctx.stroke();
+      }
+
+      // C. Target Posture Reticle at Nose Tip
+      if (landmarks[NOSE_TIP]) {
+        const nose = pt(NOSE_TIP);
+
+        // Circular reticle
+        ctx.beginPath();
+        ctx.arc(nose.x, nose.y, 16, 0, 2 * Math.PI);
+        ctx.strokeStyle = alignColor;
         ctx.lineWidth = 1.5;
         ctx.globalAlpha = 0.85;
+        ctx.stroke();
+
+        // Crosshairs
+        ctx.beginPath();
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 1.5;
+        ctx.globalAlpha = 0.8;
+        ctx.moveTo(nose.x - 22, nose.y);
+        ctx.lineTo(nose.x - 8, nose.y);
+        ctx.moveTo(nose.x + 8, nose.y);
+        ctx.lineTo(nose.x + 22, nose.y);
+        ctx.moveTo(nose.x, nose.y - 22);
+        ctx.lineTo(nose.x, nose.y - 8);
+        ctx.moveTo(nose.x, nose.y + 8);
+        ctx.lineTo(nose.x, nose.y + 22);
+        ctx.stroke();
+
+        // Directional alignment vector ray if deviated
+        if (!isAligned) {
+          const arrowX = nose.x - (yawDev * 2.2);
+          const arrowY = nose.y + (pitchDev * 2.2);
+          ctx.beginPath();
+          ctx.strokeStyle = '#F59E0B';
+          ctx.lineWidth = 2.5;
+          ctx.setLineDash([4, 3]);
+          ctx.moveTo(nose.x, nose.y);
+          ctx.lineTo(arrowX, arrowY);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      }
+
+      // 2. Eye Contours
+      [LEFT_EYE, RIGHT_EYE].forEach((eye) => {
+        ctx.beginPath();
+        ctx.strokeStyle = isAligned ? '#10B981' : '#06B6D4';
+        ctx.lineWidth = 1.5;
+        ctx.globalAlpha = 0.9;
         eye.forEach((idx, i) => {
           const p = pt(idx);
           if (i === 0) ctx.moveTo(p.x, p.y);
@@ -127,40 +221,17 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
         ctx.stroke();
       });
 
-      // Iris Crosshairs
+      // 3. Iris Crosshairs
       [LEFT_IRIS[0], RIGHT_IRIS[0]].forEach((irisIdx) => {
         if (landmarks[irisIdx]) {
           const p = pt(irisIdx);
           ctx.beginPath();
-          ctx.arc(p.x, p.y, 3.5, 0, 2 * Math.PI);
-          ctx.fillStyle = '#10B981';
+          ctx.arc(p.x, p.y, 3, 0, 2 * Math.PI);
+          ctx.fillStyle = alignColor;
           ctx.globalAlpha = 0.95;
           ctx.fill();
-
-          ctx.beginPath();
-          ctx.strokeStyle = '#FFFFFF';
-          ctx.lineWidth = 1;
-          ctx.globalAlpha = 0.6;
-          ctx.moveTo(p.x - 6, p.y);
-          ctx.lineTo(p.x + 6, p.y);
-          ctx.moveTo(p.x, p.y - 6);
-          ctx.lineTo(p.x + 6, p.y);
-          ctx.stroke();
         }
       });
-
-      // Nose direction ray
-      const nose = pt(NOSE_TIP);
-      const yawOffset = (smoothedPose.current.yaw - neutralBase.current.yaw) * 1.2;
-      const pitchOffset = (smoothedPose.current.pitch - neutralBase.current.pitch) * 1.2;
-
-      ctx.beginPath();
-      ctx.strokeStyle = '#10B981';
-      ctx.lineWidth = 2;
-      ctx.globalAlpha = 0.6;
-      ctx.moveTo(nose.x, nose.y);
-      ctx.lineTo(nose.x + yawOffset, nose.y + pitchOffset);
-      ctx.stroke();
 
       ctx.restore();
     },
@@ -191,8 +262,6 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
     const detection = landmarker.detectForVideo(video, now);
     const faceLandmarks = detection.faceLandmarks?.[0];
 
-    drawHud(faceLandmarks, video);
-
     if (!faceLandmarks) {
       noFaceDuration.current += dt;
       closedDuration.current = 0;
@@ -201,9 +270,19 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
       const st = noFaceDuration.current > 1500 ? 'distracted' : 'focused';
       onStateTick(st, dt, 0);
 
+      drawHud(null, false, 0, 0);
+
       setBiometrics((prev) => ({
         ...prev,
         isFaceTracked: false,
+        alignment: {
+          isAligned: false,
+          yawDeviation: 0,
+          pitchDeviation: 0,
+          rollDeviation: 0,
+          status: 'No Face Detected',
+          cue: 'Position webcam facing you directly'
+        },
         fps: framesCount.current,
       }));
       return;
@@ -265,6 +344,32 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
     const currentPitch = smoothedPose.current.pitch - neutralBase.current.pitch;
     const currentRoll = smoothedPose.current.roll;
 
+    // Posture Alignment Check
+    const isPostureAligned = Math.abs(currentYaw) <= 14 && Math.abs(currentPitch) <= 12 && Math.abs(currentRoll) <= 10;
+    let postureCue = 'Aligned with workspace center';
+    let postureStatus = 'Optimal Posture';
+    if (!isPostureAligned) {
+      if (currentYaw > 14) {
+        postureCue = 'Turn head slightly left';
+        postureStatus = 'Turned Right';
+      } else if (currentYaw < -14) {
+        postureCue = 'Turn head slightly right';
+        postureStatus = 'Turned Left';
+      } else if (currentPitch > 12) {
+        postureCue = 'Lift chin upward to relieve neck strain';
+        postureStatus = 'Head Slouching Down';
+      } else if (currentPitch < -12) {
+        postureCue = 'Lower chin toward screen horizon';
+        postureStatus = 'Tilted Upward';
+      } else if (Math.abs(currentRoll) > 10) {
+        postureCue = 'Level head horizon';
+        postureStatus = 'Head Leaning';
+      }
+    }
+
+    // Draw clear HUD guidelines
+    drawHud(faceLandmarks, isPostureAligned, currentYaw, currentPitch);
+
     // Blink & Eye Closure Tracking
     if (ear < 0.20) {
       closedDuration.current += dt;
@@ -292,6 +397,43 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
       yawnFlag.current = false;
     }
 
+    // --- SENTIMENT & FACIAL AFFECT ANALYSIS ---
+    const rawSmile = ((blendshapes.mouthSmileLeft || 0) + (blendshapes.mouthSmileRight || 0)) / 2;
+    const rawBrowDown = ((blendshapes.browDownLeft || 0) + (blendshapes.browDownRight || 0)) / 2;
+    const rawSquint = ((blendshapes.eyeSquintLeft || 0) + (blendshapes.eyeSquintRight || 0)) / 2;
+    const rawJawClench = blendshapes.jawClench || ((blendshapes.mouthPressLeft || 0) + (blendshapes.mouthPressRight || 0)) / 2;
+
+    // Smooth sentiment components
+    smoothedSentiment.current.smile += (rawSmile - smoothedSentiment.current.smile) * 0.2;
+    smoothedSentiment.current.stress += (rawBrowDown * 0.7 + rawJawClench * 0.3 - smoothedSentiment.current.stress) * 0.2;
+    smoothedSentiment.current.strain += (rawSquint - smoothedSentiment.current.strain) * 0.2;
+
+    const curSmile = smoothedSentiment.current.smile;
+    const curStress = smoothedSentiment.current.stress;
+    const curStrain = smoothedSentiment.current.strain;
+
+    let sentimentLabel = 'Calm Focus';
+    let sentimentDescription = 'Neutral facial muscles, balanced breathing & flow state';
+    let valenceScore = 55; // -100 to +100
+
+    if (curSmile > 0.3) {
+      sentimentLabel = 'Positive & Engaged';
+      sentimentDescription = 'Active satisfaction and positive emotional valence';
+      valenceScore = Math.min(100, Math.round(50 + curSmile * 100));
+    } else if (curStress > 0.45) {
+      sentimentLabel = 'Cognitive Strain';
+      sentimentDescription = 'Furrowed brow and jaw tension detected; take a deep breath';
+      valenceScore = Math.max(-90, Math.round(20 - curStress * 120));
+    } else if (curStrain > 0.4 || ear < 0.22) {
+      sentimentLabel = 'Eye Strain & Squinting';
+      sentimentDescription = 'Ciliary eye muscle fatigue; look into the distance';
+      valenceScore = Math.max(-60, Math.round(30 - curStrain * 90));
+    } else if (curStress > 0.25) {
+      sentimentLabel = 'Deep Problem Solving';
+      sentimentDescription = 'Slight brow furrow indicating high analytical load';
+      valenceScore = 40;
+    }
+
     // State Evaluation
     const isTurnedAway =
       Math.abs(currentYaw) > 24 || Math.abs(currentPitch) > 19 || Math.abs(gazeX) > 0.45 || gazeY < -0.42;
@@ -310,6 +452,26 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
       yawnsDetected: yawnsCount.current,
       microsleepCount: microsleeps.current,
       pose: { yaw: currentYaw, pitch: currentPitch, roll: currentRoll },
+      alignment: {
+        isAligned: isPostureAligned,
+        yawDeviation: Math.round(currentYaw),
+        pitchDeviation: Math.round(currentPitch),
+        rollDeviation: Math.round(currentRoll),
+        status: postureStatus,
+        cue: postureCue
+      },
+      sentiment: {
+        label: sentimentLabel,
+        valence: valenceScore,
+        scores: {
+          calm: Math.max(0, Math.round(100 - curStress * 100 - curStrain * 60)),
+          smile: Math.round(curSmile * 100),
+          focus: Math.round((1 - Math.min(1, Math.abs(currentYaw) / 30)) * 100),
+          stress: Math.round(curStress * 100),
+          strain: Math.round(curStrain * 100),
+        },
+        description: sentimentDescription
+      },
       isFaceTracked: true,
       fps: framesCount.current,
     });
