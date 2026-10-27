@@ -4,6 +4,7 @@ import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 const WASM_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
 const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
 
+// Key Landmark indices for MediaPipe Face Mesh
 const LEFT_EYE = [33, 160, 158, 133, 153, 144];
 const RIGHT_EYE = [362, 385, 387, 263, 373, 380];
 const LEFT_IRIS = [468, 469, 470, 471, 472];
@@ -15,6 +16,9 @@ const LEFT_EAR_TRAGUS = 234;
 const RIGHT_EAR_TRAGUS = 454;
 
 export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTick) {
+  // State Machine: 'idle' | 'requesting-permission' | 'loading-model' | 'calibrating' | 'tracking' | 'error'
+  const [engineStatus, setEngineStatus] = useState('idle');
+  const [engineError, setEngineError] = useState(null);
   const [isReady, setIsReady] = useState(false);
   const [isTracking, setIsTracking] = useState(false);
   const [fps, setFps] = useState(0);
@@ -23,11 +27,12 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
   const streamRef = useRef(null);
   const animFrameRef = useRef(null);
 
+  // Calibration and smoothing refs
   const neutralBase = useRef({ yaw: 0, pitch: 0 });
   const smoothedPose = useRef({ yaw: 0, pitch: 0, roll: 0 });
   const smoothedSentiment = useRef({ valence: 50, smile: 0, stress: 0, focus: 80, strain: 0 });
 
-  // Biometrics State
+  // Biometrics State (Throttled to 8-10 Hz to prevent React render lag)
   const [biometrics, setBiometrics] = useState({
     ear: 0,
     bpm: null,
@@ -36,18 +41,18 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
     microsleepCount: 0,
     pose: { yaw: 0, pitch: 0, roll: 0 },
     alignment: {
-      isAligned: false,
+      isAligned: true,
       yawDeviation: 0,
       pitchDeviation: 0,
       rollDeviation: 0,
       status: 'Standby',
-      cue: 'Align face with target frame'
+      cue: 'Position face in frame to begin'
     },
     sentiment: {
-      label: 'Calm Focus',
-      valence: 60,
+      label: 'Calm Flow',
+      valence: 50,
       scores: { calm: 80, smile: 0, focus: 75, stress: 10, strain: 5 },
-      description: 'Relaxed facial tone in steady flow state'
+      description: 'Neutral facial expression in balanced flow state'
     },
     isFaceTracked: false,
     fps: 0,
@@ -63,8 +68,10 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
   const prevTick = useRef(performance.now());
   const framesCount = useRef(0);
   const lastFpsTime = useRef(performance.now());
+  const lastStateTickTime = useRef(performance.now());
+  const lastUIUpdateTime = useRef(performance.now());
 
-  // Initialize MediaPipe FaceLandmarker
+  // Initialize MediaPipe FaceLandmarker with WebGL / WASM fallback
   useEffect(() => {
     let active = true;
 
@@ -90,7 +97,10 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
           }
         }
       } catch (err) {
-        console.error('Failed to load FaceLandmarker:', err);
+        console.error('Failed to initialize FaceLandmarker:', err);
+        if (active) {
+          setEngineError('Failed to load on-device vision model. Check your internet connection for initial model load.');
+        }
       }
     }
 
@@ -102,6 +112,7 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
     };
   }, []);
 
+  // Posture overlay HUD drawing function (executed directly on 2D canvas at 60 FPS)
   const drawHud = useCallback(
     (landmarks, isAligned, yawDev, pitchDev) => {
       const canvas = hudCanvasRef.current;
@@ -130,11 +141,9 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
       const w = rect.width;
       const h = rect.height;
       const pt = (idx) => ({ x: landmarks[idx].x * w, y: landmarks[idx].y * h });
-
       const alignColor = isAligned ? '#10B981' : '#F59E0B';
 
-      // 1. CLEAR POSTURE ALIGNMENT GUIDELINES
-      // A. Center Vertical Plumb Axis Line (Forehead -> Chin)
+      // 1. Vertical Plumb Axis Guideline (Forehead to Chin)
       if (landmarks[FOREHEAD] && landmarks[CHIN]) {
         const top = pt(FOREHEAD);
         const bot = pt(CHIN);
@@ -150,7 +159,7 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
         ctx.setLineDash([]);
       }
 
-      // B. Horizontal Eye Horizon Level Line
+      // 2. Horizontal Eye-Horizon Level Line
       if (landmarks[LEFT_EAR_TRAGUS] && landmarks[RIGHT_EAR_TRAGUS]) {
         const leftEar = pt(LEFT_EAR_TRAGUS);
         const rightEar = pt(RIGHT_EAR_TRAGUS);
@@ -164,11 +173,10 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
         ctx.stroke();
       }
 
-      // C. Target Posture Reticle at Nose Tip
+      // 3. Ergonomic Center Reticle at Nose Tip
       if (landmarks[NOSE_TIP]) {
         const nose = pt(NOSE_TIP);
 
-        // Circular reticle
         ctx.beginPath();
         ctx.arc(nose.x, nose.y, 16, 0, 2 * Math.PI);
         ctx.strokeStyle = alignColor;
@@ -176,7 +184,6 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
         ctx.globalAlpha = 0.85;
         ctx.stroke();
 
-        // Crosshairs
         ctx.beginPath();
         ctx.strokeStyle = '#FFFFFF';
         ctx.lineWidth = 1.5;
@@ -191,64 +198,53 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
         ctx.lineTo(nose.x, nose.y + 22);
         ctx.stroke();
 
-        // Directional alignment vector ray if deviated
+        // Directional correction ray when posture is deviated
         if (!isAligned) {
           const arrowX = nose.x - (yawDev * 2.2);
           const arrowY = nose.y + (pitchDev * 2.2);
           ctx.beginPath();
           ctx.strokeStyle = '#F59E0B';
           ctx.lineWidth = 2.5;
-          ctx.setLineDash([4, 3]);
+          ctx.globalAlpha = 0.9;
           ctx.moveTo(nose.x, nose.y);
           ctx.lineTo(arrowX, arrowY);
           ctx.stroke();
-          ctx.setLineDash([]);
+
+          ctx.beginPath();
+          ctx.arc(arrowX, arrowY, 4, 0, 2 * Math.PI);
+          ctx.fillStyle = '#F59E0B';
+          ctx.fill();
         }
       }
 
-      // 2. Eye Contours
-      [LEFT_EYE, RIGHT_EYE].forEach((eye) => {
-        ctx.beginPath();
-        ctx.strokeStyle = isAligned ? '#10B981' : '#06B6D4';
-        ctx.lineWidth = 1.5;
-        ctx.globalAlpha = 0.9;
-        eye.forEach((idx, i) => {
-          const p = pt(idx);
-          if (i === 0) ctx.moveTo(p.x, p.y);
-          else ctx.lineTo(p.x, p.y);
-        });
-        ctx.closePath();
-        ctx.stroke();
-      });
-
-      // 3. Iris Crosshairs
-      [LEFT_IRIS[0], RIGHT_IRIS[0]].forEach((irisIdx) => {
-        if (landmarks[irisIdx]) {
-          const p = pt(irisIdx);
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, 3, 0, 2 * Math.PI);
-          ctx.fillStyle = alignColor;
-          ctx.globalAlpha = 0.95;
-          ctx.fill();
-        }
-      });
-
       ctx.restore();
     },
-    [hudEnabled, hudCanvasRef]
+    [hudCanvasRef, hudEnabled]
   );
 
-  const loop = useCallback(() => {
-    const video = videoRef.current;
-    const landmarker = landmarkerRef.current;
-    if (!video || !landmarker) return;
+  // Compute Eye Aspect Ratio (Soukupová & Čech, 2016)
+  const computeEar = (eyeIndices, landmarks) => {
+    const p1 = landmarks[eyeIndices[0]];
+    const p2 = landmarks[eyeIndices[1]];
+    const p3 = landmarks[eyeIndices[2]];
+    const p4 = landmarks[eyeIndices[3]];
+    const p5 = landmarks[eyeIndices[4]];
+    const p6 = landmarks[eyeIndices[5]];
 
-    animFrameRef.current = requestAnimationFrame(loop);
+    const dVertical1 = Math.hypot(p2.x - p6.x, p2.y - p6.y);
+    const dVertical2 = Math.hypot(p3.x - p5.x, p3.y - p5.y);
+    const dHorizontal = Math.hypot(p1.x - p4.x, p1.y - p4.y);
+
+    if (dHorizontal === 0) return 0;
+    return (dVertical1 + dVertical2) / (2.0 * dHorizontal);
+  };
+
+  // Main High-Frequency Detection Loop
+  const loop = useCallback(() => {
+    if (!videoRef.current || !landmarkerRef.current) return;
 
     const now = performance.now();
-    if (video.readyState < 2) return;
-
-    const dt = Math.min(now - prevTick.current, 200);
+    const dt = now - prevTick.current;
     prevTick.current = now;
 
     // FPS calculation
@@ -259,64 +255,72 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
       lastFpsTime.current = now;
     }
 
-    const detection = landmarker.detectForVideo(video, now);
+    const video = videoRef.current;
+    if (video.readyState < 2) {
+      animFrameRef.current = requestAnimationFrame(loop);
+      return;
+    }
+
+    let detection;
+    try {
+      detection = landmarkerRef.current.detectForVideo(video, now);
+    } catch {
+      animFrameRef.current = requestAnimationFrame(loop);
+      return;
+    }
+
     const faceLandmarks = detection.faceLandmarks?.[0];
 
+    // No face in frame handling
     if (!faceLandmarks) {
       noFaceDuration.current += dt;
-      closedDuration.current = 0;
-      yawnDuration.current = 0;
-
-      const st = noFaceDuration.current > 1500 ? 'distracted' : 'focused';
-      onStateTick(st, dt, 0);
-
       drawHud(null, false, 0, 0);
 
-      setBiometrics((prev) => ({
-        ...prev,
-        isFaceTracked: false,
-        alignment: {
-          isAligned: false,
-          yawDeviation: 0,
-          pitchDeviation: 0,
-          rollDeviation: 0,
-          status: 'No Face Detected',
-          cue: 'Position webcam facing you directly'
-        },
-        fps: framesCount.current,
-      }));
+      if (now - lastStateTickTime.current >= 100) {
+        lastStateTickTime.current = now;
+        onStateTick('idle', dt, 0);
+      }
+
+      // Throttle UI update to 10 Hz
+      if (now - lastUIUpdateTime.current >= 100) {
+        lastUIUpdateTime.current = now;
+        setBiometrics((prev) => ({
+          ...prev,
+          ear: 0,
+          isFaceTracked: false,
+          alignment: {
+            ...prev.alignment,
+            isAligned: false,
+            status: 'Face Not Detected',
+            cue: 'Position head in front of webcam'
+          }
+        }));
+      }
+
+      animFrameRef.current = requestAnimationFrame(loop);
       return;
     }
 
     noFaceDuration.current = 0;
-    const vW = video.videoWidth || 640;
-    const vH = video.videoHeight || 480;
-    const dist = (a, b) =>
-      Math.hypot((faceLandmarks[a].x - faceLandmarks[b].x) * vW, (faceLandmarks[a].y - faceLandmarks[b].y) * vH);
 
-    // Eye Aspect Ratio (EAR)
-    const earL =
-      (dist(LEFT_EYE[1], LEFT_EYE[5]) + dist(LEFT_EYE[2], LEFT_EYE[4])) / (2 * dist(LEFT_EYE[0], LEFT_EYE[3]));
-    const earR =
-      (dist(RIGHT_EYE[1], RIGHT_EYE[5]) + dist(RIGHT_EYE[2], RIGHT_EYE[4])) /
-      (2 * dist(RIGHT_EYE[0], RIGHT_EYE[3]));
-    const ear = (earL + earR) / 2;
+    // 1. EAR (Eye Aspect Ratio)
+    const leftEar = computeEar(LEFT_EYE, faceLandmarks);
+    const rightEar = computeEar(RIGHT_EYE, faceLandmarks);
+    const ear = (leftEar + rightEar) / 2;
 
-    // Blendshapes Analysis
+    // 2. Blendshapes dictionary
     const blendshapes = {};
-    (detection.faceBlendshapes?.[0]?.categories || []).forEach((cat) => {
-      blendshapes[cat.categoryName] = cat.score;
-    });
+    if (detection.faceBlendshapes?.[0]?.categories) {
+      for (const cat of detection.faceBlendshapes[0].categories) {
+        blendshapes[cat.categoryName] = cat.score;
+      }
+    }
 
-    // Horizontal & Vertical Gaze Estimation
-    const gazeX =
-      ((blendshapes.eyeLookInLeft || 0) + (blendshapes.eyeLookOutRight || 0) -
-        ((blendshapes.eyeLookOutLeft || 0) + (blendshapes.eyeLookInRight || 0))) /
-        2 || 0;
-    const gazeY =
-      ((blendshapes.eyeLookUpLeft || 0) + (blendshapes.eyeLookUpRight || 0) -
-        ((blendshapes.eyeLookDownLeft || 0) + (blendshapes.eyeLookDownRight || 0))) /
-        2 || 0;
+    // 3. Iris / Gaze directional vector
+    const gazeX = ((blendshapes.eyeLookInLeft || 0) - (blendshapes.eyeLookOutLeft || 0) +
+                   (blendshapes.eyeLookOutRight || 0) - (blendshapes.eyeLookInRight || 0)) / 2;
+    const gazeY = ((blendshapes.eyeLookUpLeft || 0) + (blendshapes.eyeLookUpRight || 0) -
+                   (blendshapes.eyeLookDownLeft || 0) - (blendshapes.eyeLookDownRight || 0)) / 2;
 
     let dir = 'Center';
     if (Math.abs(gazeX) < 0.28 && Math.abs(gazeY) < 0.28) {
@@ -327,7 +331,7 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
       dir = gazeY > 0 ? 'Up' : 'Down';
     }
 
-    // 3D Head Orientation via 4x4 matrix
+    // 4. 3D Head Pose orientation via transformation matrix
     const matrix = detection.facialTransformationMatrixes?.[0]?.data;
     if (matrix) {
       const rawPose = {
@@ -335,6 +339,7 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
         pitch: Math.atan2(-matrix[9], Math.hypot(matrix[8], matrix[10])) * 57.2958,
         roll: Math.atan2(matrix[1], matrix[5]) * 57.2958,
       };
+      // Exponential Moving Average smoothing
       smoothedPose.current.yaw += (rawPose.yaw - smoothedPose.current.yaw) * 0.35;
       smoothedPose.current.pitch += (rawPose.pitch - smoothedPose.current.pitch) * 0.35;
       smoothedPose.current.roll += (rawPose.roll - smoothedPose.current.roll) * 0.35;
@@ -344,7 +349,7 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
     const currentPitch = smoothedPose.current.pitch - neutralBase.current.pitch;
     const currentRoll = smoothedPose.current.roll;
 
-    // Posture Alignment Check
+    // Posture Alignment evaluation
     const isPostureAligned = Math.abs(currentYaw) <= 14 && Math.abs(currentPitch) <= 12 && Math.abs(currentRoll) <= 10;
     let postureCue = 'Aligned with workspace center';
     let postureStatus = 'Optimal Posture';
@@ -356,8 +361,8 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
         postureCue = 'Turn head slightly right';
         postureStatus = 'Turned Left';
       } else if (currentPitch > 12) {
-        postureCue = 'Lift chin upward to relieve neck strain';
-        postureStatus = 'Head Slouching Down';
+        postureCue = 'Lift chin upward to relieve neck tension';
+        postureStatus = 'Slouching Down';
       } else if (currentPitch < -12) {
         postureCue = 'Lower chin toward screen horizon';
         postureStatus = 'Tilted Upward';
@@ -367,10 +372,10 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
       }
     }
 
-    // Draw clear HUD guidelines
+    // Draw HUD guidelines at full frame rate
     drawHud(faceLandmarks, isPostureAligned, currentYaw, currentPitch);
 
-    // Blink & Eye Closure Tracking
+    // 5. Blink and Eye Closure Tracking
     if (ear < 0.20) {
       closedDuration.current += dt;
       if (closedDuration.current > 1200) {
@@ -384,7 +389,7 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
     }
     blinkTimestamps.current = blinkTimestamps.current.filter((t) => now - t < 60000);
 
-    // Yawn Detection
+    // 6. Yawn Detection via Jaw blendshape
     const jawOpen = blendshapes.jawOpen || 0;
     if (jawOpen > 0.55) {
       yawnDuration.current += dt;
@@ -397,13 +402,12 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
       yawnFlag.current = false;
     }
 
-    // --- SENTIMENT & FACIAL AFFECT ANALYSIS ---
+    // 7. Sentiment & Affect Telemetry
     const rawSmile = ((blendshapes.mouthSmileLeft || 0) + (blendshapes.mouthSmileRight || 0)) / 2;
     const rawBrowDown = ((blendshapes.browDownLeft || 0) + (blendshapes.browDownRight || 0)) / 2;
     const rawSquint = ((blendshapes.eyeSquintLeft || 0) + (blendshapes.eyeSquintRight || 0)) / 2;
     const rawJawClench = blendshapes.jawClench || ((blendshapes.mouthPressLeft || 0) + (blendshapes.mouthPressRight || 0)) / 2;
 
-    // Smooth sentiment components
     smoothedSentiment.current.smile += (rawSmile - smoothedSentiment.current.smile) * 0.2;
     smoothedSentiment.current.stress += (rawBrowDown * 0.7 + rawJawClench * 0.3 - smoothedSentiment.current.stress) * 0.2;
     smoothedSentiment.current.strain += (rawSquint - smoothedSentiment.current.strain) * 0.2;
@@ -412,25 +416,25 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
     const curStress = smoothedSentiment.current.stress;
     const curStrain = smoothedSentiment.current.strain;
 
-    let sentimentLabel = 'Calm Focus';
-    let sentimentDescription = 'Neutral facial muscles, balanced breathing & flow state';
-    let valenceScore = 55; // -100 to +100
+    let sentimentLabel = 'Calm Flow';
+    let sentimentDescription = 'Neutral facial muscle tone, steady breathing & flow state';
+    let valenceScore = 55;
 
     if (curSmile > 0.3) {
       sentimentLabel = 'Positive & Engaged';
-      sentimentDescription = 'Active satisfaction and positive emotional valence';
+      sentimentDescription = 'Active satisfaction and positive engagement';
       valenceScore = Math.min(100, Math.round(50 + curSmile * 100));
     } else if (curStress > 0.45) {
       sentimentLabel = 'Cognitive Strain';
-      sentimentDescription = 'Furrowed brow and jaw tension detected; take a deep breath';
+      sentimentDescription = 'Brow furrowing and jaw tension detected';
       valenceScore = Math.max(-90, Math.round(20 - curStress * 120));
     } else if (curStrain > 0.4 || ear < 0.22) {
       sentimentLabel = 'Eye Strain & Squinting';
-      sentimentDescription = 'Ciliary eye muscle fatigue; look into the distance';
+      sentimentDescription = 'Ciliary eye muscle fatigue; look into distance';
       valenceScore = Math.max(-60, Math.round(30 - curStrain * 90));
     } else if (curStress > 0.25) {
       sentimentLabel = 'Deep Problem Solving';
-      sentimentDescription = 'Slight brow furrow indicating high analytical load';
+      sentimentDescription = 'Analytical concentration with mild furrow';
       valenceScore = 40;
     }
 
@@ -440,59 +444,111 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
     const isDrowsy = closedDuration.current > 1000 || yawnDuration.current > 1200;
     const calculatedState = isDrowsy ? 'drowsy' : isTurnedAway ? 'distracted' : 'focused';
 
-    onStateTick(calculatedState, dt, Number(ear.toFixed(2)));
+    // State tick callback
+    if (now - lastStateTickTime.current >= 100) {
+      lastStateTickTime.current = now;
+      onStateTick(calculatedState, dt, Number(ear.toFixed(2)));
+    }
 
-    // Blink rate
-    const bpmVal = Math.round((blinkTimestamps.current.length * 60000) / 60000);
+    // THROTTLE React state updates to ~10 Hz (every 100ms)
+    // This maintains 30-60 FPS camera inference without bogging down the React render cycle
+    if (now - lastUIUpdateTime.current >= 100) {
+      lastUIUpdateTime.current = now;
+      const bpmVal = Math.round((blinkTimestamps.current.length * 60000) / 60000);
 
-    setBiometrics({
-      ear: Number(ear.toFixed(2)),
-      bpm: bpmVal,
-      gazeDirection: dir,
-      yawnsDetected: yawnsCount.current,
-      microsleepCount: microsleeps.current,
-      pose: { yaw: currentYaw, pitch: currentPitch, roll: currentRoll },
-      alignment: {
-        isAligned: isPostureAligned,
-        yawDeviation: Math.round(currentYaw),
-        pitchDeviation: Math.round(currentPitch),
-        rollDeviation: Math.round(currentRoll),
-        status: postureStatus,
-        cue: postureCue
-      },
-      sentiment: {
-        label: sentimentLabel,
-        valence: valenceScore,
-        scores: {
-          calm: Math.max(0, Math.round(100 - curStress * 100 - curStrain * 60)),
-          smile: Math.round(curSmile * 100),
-          focus: Math.round((1 - Math.min(1, Math.abs(currentYaw) / 30)) * 100),
-          stress: Math.round(curStress * 100),
-          strain: Math.round(curStrain * 100),
+      setBiometrics({
+        ear: Number(ear.toFixed(2)),
+        bpm: bpmVal,
+        gazeDirection: dir,
+        yawnsDetected: yawnsCount.current,
+        microsleepCount: microsleeps.current,
+        pose: {
+          yaw: Math.round(currentYaw),
+          pitch: Math.round(currentPitch),
+          roll: Math.round(currentRoll),
         },
-        description: sentimentDescription
-      },
-      isFaceTracked: true,
-      fps: framesCount.current,
-    });
+        alignment: {
+          isAligned: isPostureAligned,
+          yawDeviation: Math.round(currentYaw),
+          pitchDeviation: Math.round(currentPitch),
+          rollDeviation: Math.round(currentRoll),
+          status: postureStatus,
+          cue: postureCue,
+        },
+        sentiment: {
+          label: sentimentLabel,
+          valence: valenceScore,
+          scores: {
+            calm: Math.max(0, Math.round(100 - curStress * 100 - curStrain * 60)),
+            smile: Math.round(curSmile * 100),
+            focus: Math.round((1 - Math.min(1, Math.abs(currentYaw) / 30)) * 100),
+            stress: Math.round(curStress * 100),
+            strain: Math.round(curStrain * 100),
+          },
+          description: sentimentDescription,
+        },
+        isFaceTracked: true,
+        fps: framesCount.current,
+      });
+    }
+
+    animFrameRef.current = requestAnimationFrame(loop);
   }, [videoRef, drawHud, onStateTick]);
 
+  // Start with explicit state machine transitions
   const start = useCallback(async () => {
+    setEngineError(null);
+    setEngineStatus('requesting-permission');
+
     try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error('Webcam API is not supported in this browser. Use Chrome, Edge, Safari, or Firefox.');
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
         audio: false,
       });
+
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
       }
+
+      // Check model readiness
+      if (!landmarkerRef.current) {
+        setEngineStatus('loading-model');
+        let waited = 0;
+        while (!landmarkerRef.current && waited < 10000) {
+          await new Promise((r) => setTimeout(r, 100));
+          waited += 100;
+        }
+        if (!landmarkerRef.current) {
+          throw new Error('On-device vision model loading timed out. Please check network connection and reload.');
+        }
+      }
+
+      setEngineStatus('calibrating');
+      await new Promise((r) => setTimeout(r, 400));
+
       setIsTracking(true);
+      setEngineStatus('tracking');
       prevTick.current = performance.now();
       loop();
     } catch (err) {
-      console.error('Camera access error:', err);
+      console.error('Camera or initialization error:', err);
+      let errorMsg = 'Failed to access camera.';
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        errorMsg = 'Camera permission was denied. Please allow camera access in your browser address bar and try again.';
+      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+        errorMsg = 'No camera device found. Please connect a webcam to continue.';
+      } else if (err.message) {
+        errorMsg = err.message;
+      }
+      setEngineError(errorMsg);
+      setEngineStatus('error');
+      setIsTracking(false);
       throw err;
     }
   }, [videoRef, loop]);
@@ -509,6 +565,7 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
       videoRef.current.srcObject = null;
     }
     setIsTracking(false);
+    setEngineStatus('idle');
   }, [videoRef]);
 
   const recenter = useCallback(() => {
@@ -519,6 +576,8 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
   }, []);
 
   return {
+    engineStatus,
+    engineError,
     isReady,
     isTracking,
     fps,

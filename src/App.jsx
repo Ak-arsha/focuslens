@@ -1,62 +1,49 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Sidebar } from './components/Sidebar';
+import { LandingScreen } from './components/LandingScreen';
 import { CameraStage } from './components/CameraStage';
 import { WhoopFocusDial } from './components/WhoopFocusDial';
-import { BiometricsGrid } from './components/BiometricsGrid';
-import { SprintController } from './components/SprintController';
-import { AmbientSoundDeck } from './components/AmbientSoundDeck';
-import { GuidedBreakModal } from './components/GuidedBreakModal';
+import { CoreBiometricsStack } from './components/CoreBiometricsStack';
+import { AdvancedTelemetryDrawer } from './components/AdvancedTelemetryDrawer';
 import { TimelineChart } from './components/TimelineChart';
-import { HistoryArchive } from './components/HistoryArchive';
-import { PrivacyModal } from './components/PrivacyModal';
-import { ShareModal } from './components/ShareModal';
-import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
-import { AboutModal } from './components/AboutModal';
 import { SessionSummaryModal } from './components/SessionSummaryModal';
-import { CommandPalette } from './components/CommandPalette';
-import { ThreeHeadVisualizer } from './components/ThreeHeadVisualizer';
+import { PrivacyModal } from './components/PrivacyModal';
+import { HistoryArchive } from './components/HistoryArchive';
 import { useFaceLandmarker } from './hooks/useFaceLandmarker';
-import { playChime, setAmbientSound, updateAmbientVolume } from './utils/audio';
+import { playChime } from './utils/audio';
+import { saveSessionToDB, getAllSessionsFromDB, deleteSessionFromDB } from './utils/db';
 import {
-  ShieldCheck,
-  Info,
-  Command,
   Compass,
   Volume2,
   VolumeX,
   Sun,
   Moon,
   Eye,
-  Activity,
-  Sparkles
+  Square,
+  ShieldCheck,
+  History,
+  X,
+  Play,
+  Pause
 } from 'lucide-react';
 
-const STORAGE_KEY = 'focuslens:history_v2';
 const THEME_KEY = 'focuslens:theme';
-const VIEW_KEY = 'focuslens:view_mode';
-
 const TARGET_SCORES = { focused: 100, distracted: 38, drowsy: 10, idle: 80 };
 
 export function App() {
   const videoRef = useRef(null);
   const hudCanvasRef = useRef(null);
 
-  // App Shell & Navigation
-  const [activeTab, setActiveTab] = useState('studio');
+  // High-level Screen State: 'landing' | 'workspace'
+  const [currentScreen, setCurrentScreen] = useState('landing');
   const [theme, setTheme] = useState('dark');
-  const [viewMode, setViewMode] = useState('studio');
   const [soundFxEnabled, setSoundFxEnabled] = useState(true);
   const [hudEnabled, setHudEnabled] = useState(true);
-  const [ambientMode, setAmbientMode] = useState('off');
-  const [ambientVol, setAmbientVol] = useState(35);
 
   // Focus & Sprint Tracking State
   const [state, setState] = useState('idle');
   const [score, setScore] = useState(85);
   const [sprintMins, setSprintMins] = useState(25);
-  const [cycleCount, setCycleCount] = useState(1);
   const [timeRemainingMs, setTimeRemainingMs] = useState(25 * 60 * 1000);
-  const [isBreakOpen, setIsBreakOpen] = useState(false);
 
   // Analytics & History
   const [timeline, setTimeline] = useState([]);
@@ -66,17 +53,14 @@ export function App() {
   const [bestStreakMs, setBestStreakMs] = useState(0);
   const [maxDistractionMs, setMaxDistractionMs] = useState(0);
 
-  // Modals & Overlays
+  // Modals
   const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
-  const [isShareOpen, setIsShareOpen] = useState(false);
-  const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
-  const [isAboutOpen, setIsAboutOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
-  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [sessionSummaryData, setSessionSummaryData] = useState(null);
   const [toast, setToast] = useState(null);
 
-  // Ref tracking for high-frequency processing loops
+  // Refs for tracking continuous telemetry
   const scoreRef = useRef(85);
   const scoreSumRef = useRef(0);
   const scoreCountRef = useRef(0);
@@ -98,97 +82,98 @@ export function App() {
 
   // State tick callback from useFaceLandmarker
   const handleStateTick = useCallback(
-    (nextState, dt, ear) => {
-      setState(nextState);
-
-      // Score exponential transition
-      const target = TARGET_SCORES[nextState];
-      scoreRef.current += (target - scoreRef.current) * Math.min(1, dt / 1500);
-      scoreSumRef.current += scoreRef.current;
-      scoreCountRef.current++;
-      totalFramesRef.current++;
-      setScore(scoreRef.current);
-
-      // Time in state
-      if (nextState !== 'idle') {
-        setTimeInState((prev) => ({
-          ...prev,
-          [nextState]: prev[nextState] + dt,
-        }));
-      }
-
-      // Streaks
-      if (nextState === 'focused') {
-        currentStreakRef.current += dt;
-        bestStreakRef.current = Math.max(bestStreakRef.current, currentStreakRef.current);
-        distractionStreakRef.current = 0;
-      } else {
-        currentStreakRef.current = 0;
-        distractionStreakRef.current += dt;
-        maxDistractionRef.current = Math.max(maxDistractionRef.current, distractionStreakRef.current);
-      }
-      setBestStreakMs(bestStreakRef.current);
-      setMaxDistractionMs(maxDistractionRef.current);
-
+    (detectedState, dt, currentEar) => {
       const now = performance.now();
-      const currentElapsed = now - sessionStartTimeRef.current;
-      setElapsedMs(currentElapsed);
+      setState(detectedState);
 
-      // Sound FX alerts
-      if (
-        soundFxEnabled &&
-        nextState !== 'focused' &&
-        distractionStreakRef.current > 4000 &&
-        !isBreakOpen &&
-        now - lastAudioWarningRef.current > 10000
-      ) {
-        playChime(nextState === 'drowsy' ? 'alert' : 'warn');
-        lastAudioWarningRef.current = now;
-      }
+      // Adaptive Focus Score Engine
+      const targetScore = TARGET_SCORES[detectedState] ?? 80;
+      const alpha = 0.08;
+      const nextScore = Math.max(0, Math.min(100, scoreRef.current + alpha * (targetScore - scoreRef.current)));
+      scoreRef.current = nextScore;
+      setScore(nextScore);
 
-      // Sprint countdown
-      if (!isBreakOpen) {
-        const remaining = Math.max(0, sprintEndRef.current - now);
-        setTimeRemainingMs(remaining);
-        if (remaining <= 0) {
-          setIsBreakOpen(true);
-          playChime('complete');
-          showToast('Focus Sprint Complete! Starting restorative break.');
+      scoreSumRef.current += nextScore;
+      scoreCountRef.current += 1;
+
+      // Track streaks and distractions
+      if (detectedState === 'focused') {
+        currentStreakRef.current += dt;
+        distractionStreakRef.current = 0;
+        if (currentStreakRef.current > bestStreakRef.current) {
+          bestStreakRef.current = currentStreakRef.current;
+          setBestStreakMs(currentStreakRef.current);
+        }
+      } else if (detectedState === 'distracted' || detectedState === 'drowsy') {
+        distractionStreakRef.current += dt;
+        currentStreakRef.current = 0;
+        if (distractionStreakRef.current > maxDistractionRef.current) {
+          maxDistractionRef.current = distractionStreakRef.current;
+          setMaxDistractionMs(distractionStreakRef.current);
+        }
+
+        // Auditory alert chimes for prolonged distraction or fatigue
+        if (soundFxEnabled && now - lastAudioWarningRef.current > 12000) {
+          if (detectedState === 'drowsy') {
+            playChime('alert');
+            lastAudioWarningRef.current = now;
+          } else if (distractionStreakRef.current > 3500) {
+            playChime('warn');
+            lastAudioWarningRef.current = now;
+          }
         }
       }
 
-      // Timeline log every 1000ms
+      // Track frame alignment
+      totalFramesRef.current += 1;
+
+      // Update time spent per state
+      setTimeInState((prev) => ({
+        ...prev,
+        [detectedState]: (prev[detectedState] || 0) + dt,
+      }));
+
+      // Log timeline telemetry samples every 1000ms
       if (now - lastTimelineLogRef.current >= 1000) {
         lastTimelineLogRef.current = now;
+        const currentElapsed = sessionStartTimeRef.current ? now - sessionStartTimeRef.current : 0;
+        setElapsedMs(currentElapsed);
+
         setTimeline((prev) => [
-          ...prev,
+          ...prev.slice(-120),
           {
             t: Math.round(currentElapsed / 1000),
-            s: Math.round(scoreRef.current),
-            st: nextState,
-            ear,
+            s: Math.round(nextScore),
+            st: detectedState,
+            ear: currentEar,
           },
         ]);
       }
     },
-    [soundFxEnabled, isBreakOpen]
+    [soundFxEnabled]
   );
 
-  const { isTracking, fps, biometrics, start, stop, recenter } = useFaceLandmarker(
-    videoRef,
-    hudCanvasRef,
-    hudEnabled,
-    handleStateTick
-  );
+  // Hook instance
+  const {
+    engineStatus,
+    engineError,
+    isReady,
+    isTracking,
+    fps,
+    biometrics,
+    start: startTracking,
+    stop: stopTracking,
+    recenter,
+  } = useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, handleStateTick);
 
-  // Track posture alignment frames
+  // Update posture alignment counters
   useEffect(() => {
-    if (biometrics.alignment?.isAligned) {
-      alignedFramesRef.current++;
+    if (isTracking && biometrics.alignment?.isAligned) {
+      alignedFramesRef.current += 1;
     }
-  }, [biometrics.alignment]);
+  }, [isTracking, biometrics.alignment?.isAligned]);
 
-  // Apply Theme Helper
+  // Apply Theme helper
   const applyTheme = (themeName) => {
     document.documentElement.setAttribute('data-theme', themeName);
     if (themeName === 'dark') {
@@ -200,21 +185,15 @@ export function App() {
     }
   };
 
-  // Initialize Theme and ViewMode from LocalStorage
+  // Initialize Theme and load past sessions from IndexedDB
   useEffect(() => {
     const savedTheme = localStorage.getItem(THEME_KEY) || 'dark';
     setTheme(savedTheme);
     applyTheme(savedTheme);
 
-    const savedView = localStorage.getItem(VIEW_KEY) || 'studio';
-    setViewMode(savedView);
-
-    try {
-      const savedHistory = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-      setHistory(savedHistory);
-    } catch {
-      // ignore parse error
-    }
+    getAllSessionsFromDB()
+      .then((sessions) => setHistory(sessions))
+      .catch((err) => console.warn('Could not load sessions from IndexedDB:', err));
   }, []);
 
   const toggleTheme = () => {
@@ -222,45 +201,33 @@ export function App() {
     setTheme(next);
     applyTheme(next);
     localStorage.setItem(THEME_KEY, next);
-    if (soundFxEnabled) playChime('click');
-    showToast(`Switched to ${next === 'dark' ? 'Dark' : 'Light'} Mode`);
   };
 
-  const handleSetViewMode = (mode) => {
-    setViewMode(mode);
-    localStorage.setItem(VIEW_KEY, mode);
-    if (soundFxEnabled) playChime('click');
-  };
+  // Sprint Timer Countdown Loop
+  useEffect(() => {
+    if (!isTracking) return;
 
-  const handleAmbientChange = (mode) => {
-    setAmbientMode(mode);
-    setAmbientSound(mode, ambientVol);
-    showToast(`Ambient soundscape: ${mode === 'off' ? 'Mute' : mode}`);
-  };
+    const interval = setInterval(() => {
+      const remaining = Math.max(0, sprintEndRef.current - Date.now());
+      setTimeRemainingMs(remaining);
 
-  const handleVolumeChange = (vol) => {
-    setAmbientVol(vol);
-    updateAmbientVolume(vol);
-  };
+      if (remaining === 0) {
+        if (soundFxEnabled) playChime('complete');
+        showToast('Focus Sprint Finished! Great job.');
+        handleEndSession();
+      }
+    }, 1000);
 
-  const handleSprintMinsChange = (mins) => {
-    setSprintMins(mins);
-    const ms = mins * 60 * 1000;
-    setTimeRemainingMs(ms);
-    if (isTracking && !isBreakOpen) {
-      sprintEndRef.current = performance.now() + ms;
-    }
-    if (soundFxEnabled) playChime('click');
-    showToast(`Sprint duration set to ${mins} minutes`);
-  };
+    return () => clearInterval(interval);
+  }, [isTracking, soundFxEnabled]);
 
-  const handleStartTracking = async () => {
+  // Start Focus Session
+  const handleStartSession = async () => {
     try {
-      await start();
-      const now = performance.now();
-      sessionStartTimeRef.current = now;
-      sprintEndRef.current = now + sprintMins * 60 * 1000;
-      lastTimelineLogRef.current = now;
+      await startTracking();
+      sessionStartTimeRef.current = performance.now();
+      sprintEndRef.current = Date.now() + sprintMins * 60 * 1000;
+      setTimeRemainingMs(sprintMins * 60 * 1000);
       scoreRef.current = 85;
       scoreSumRef.current = 0;
       scoreCountRef.current = 0;
@@ -270,99 +237,70 @@ export function App() {
       bestStreakRef.current = 0;
       distractionStreakRef.current = 0;
       maxDistractionRef.current = 0;
-
-      setTimeInState({ focused: 0, distracted: 0, drowsy: 0 });
       setTimeline([]);
-      setTimeRemainingMs(sprintMins * 60 * 1000);
-      setIsBreakOpen(false);
+      setTimeInState({ focused: 0, distracted: 0, drowsy: 0 });
 
+      setCurrentScreen('workspace');
       if (soundFxEnabled) playChime('start');
-      showToast('Camera active - focus telemetry started!');
+      showToast('Session commenced. Focus & Posture active.');
     } catch {
-      showToast('Camera access blocked. Please allow webcam permission in browser.');
+      // Error handled by engineError state machine
     }
   };
 
-  const handleToggleTracking = () => {
-    if (isTracking) {
-      stop();
-      showToast('Camera tracking paused (Press Space to resume)');
-    } else {
-      handleStartTracking();
-    }
-  };
-
-  const handleEndSession = () => {
-    stop();
-    const elapsed = performance.now() - sessionStartTimeRef.current;
-
-    const avg = Math.round(scoreSumRef.current / Math.max(scoreCountRef.current, 1));
-    const flow = Math.round((timeInState.focused / Math.max(elapsed, 1)) * 100);
+  // End Session & Generate Health Report
+  const handleEndSession = async () => {
+    stopTracking();
+    const duration = Math.max(1000, elapsedMs);
+    const totalTime = timeInState.focused + timeInState.distracted + timeInState.drowsy || 1;
+    const flowPct = Math.round((timeInState.focused / totalTime) * 100);
+    const avgScore = Math.round(scoreSumRef.current / Math.max(scoreCountRef.current, 1)) || 80;
     const alignmentPct = totalFramesRef.current > 0
       ? Math.round((alignedFramesRef.current / totalFramesRef.current) * 100)
       : 88;
 
-    const stats = {
-      durationMs: elapsed,
-      avgScore: avg,
-      flowPct: flow,
+    const summary = {
+      id: `session_${Date.now()}`,
+      date: new Date().toISOString(),
+      timestamp: Date.now(),
+      durationMs: duration,
+      avgScore,
+      flowPct,
       bestStreakMs: bestStreakRef.current,
+      maxDistractionMs: maxDistractionRef.current,
       yawns: biometrics.yawnsDetected,
       microsleeps: biometrics.microsleepCount,
-      dominantSentiment: biometrics.sentiment?.label || 'Calm Focus',
+      dominantSentiment: biometrics.sentiment?.label || 'Calm Flow',
       alignmentScore: alignmentPct,
+      avgBpm: biometrics.bpm || 16,
+      timeline,
     };
 
-    if (elapsed >= 5000) {
-      const record = {
-        id: Date.now().toString(),
-        date: new Date().toISOString(),
-        duration: elapsed,
-        avgScore: avg,
-        flowPct: flow,
-        bestStreak: bestStreakRef.current,
-        yawns: biometrics.yawnsDetected,
-        dominantSentiment: stats.dominantSentiment,
-        alignmentScore: alignmentPct,
-      };
+    setSessionSummaryData(summary);
+    setIsSummaryOpen(true);
 
-      const updated = [record, ...history.slice(0, 24)];
-      setHistory(updated);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-
-      setSessionSummaryData(stats);
-      setIsSummaryOpen(true);
-      if (soundFxEnabled) playChime('complete');
-      showToast('Session concluded & archived.');
-    } else {
-      showToast('Session ended (under 5 seconds, not archived).');
+    if (duration > 10000) {
+      try {
+        await saveSessionToDB(summary);
+        const updated = await getAllSessionsFromDB();
+        setHistory(updated);
+      } catch (err) {
+        console.warn('Failed to persist session to IndexedDB:', err);
+      }
     }
 
-    setState('idle');
+    if (soundFxEnabled) playChime('complete');
   };
 
-  const handleQuickBreak = () => {
-    setIsBreakOpen(true);
-    if (soundFxEnabled) playChime('zen');
+  // Format Remaining Timer
+  const formatRemaining = (ms) => {
+    const totalSecs = Math.max(0, Math.ceil(ms / 1000));
+    const mins = Math.floor(totalSecs / 60);
+    const secs = totalSecs % 60;
+    return `${mins}:${String(secs).padStart(2, '0')}`;
   };
 
-  const handleResumeSprint = () => {
-    setIsBreakOpen(false);
-    setCycleCount((prev) => prev + 1);
-    sprintEndRef.current = performance.now() + sprintMins * 60 * 1000;
-    setTimeRemainingMs(sprintMins * 60 * 1000);
-    if (soundFxEnabled) playChime('start');
-    showToast(`Sprint Cycle #${cycleCount + 1} resumed!`);
-  };
-
-  const handleClearHistory = () => {
-    if (confirm('Are you sure you want to clear your local session history?')) {
-      localStorage.removeItem(STORAGE_KEY);
-      setHistory([]);
-      showToast('Session history wiped.');
-    }
-  };
-
+  // Export CSV
   const handleExportCsv = () => {
     if (!timeline.length) return;
     const headers = 'timestamp_seconds,focus_score,state,eye_openness_ear\n';
@@ -377,24 +315,17 @@ export function App() {
     showToast('CSV telemetry exported.');
   };
 
+  // Export JSON
   const handleExportJson = () => {
-    if (!timeline.length) return;
-    const avg = Math.round(scoreSumRef.current / Math.max(scoreCountRef.current, 1));
-    const data = {
+    const summary = sessionSummaryData || {
       app: 'FocusLens',
       version: '2.0.0',
-      date: new Date().toISOString(),
-      durationSeconds: Math.round(elapsedMs / 1000),
-      averageScore: avg,
-      bestStreakMs,
-      maxDistractionMs,
-      yawnsDetected: biometrics.yawnsDetected,
-      microsleepsDetected: biometrics.microsleepCount,
-      sentiment: biometrics.sentiment,
-      timeInState,
+      exportedAt: new Date().toISOString(),
+      durationMs: elapsedMs,
+      averageScore: Math.round(scoreRef.current),
       timeline,
     };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(summary, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -404,427 +335,323 @@ export function App() {
     showToast('JSON session exported.');
   };
 
-  // Keyboard Shortcuts & Raycast Command Listener
+  // Global Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // Don't trigger if user is interacting with form inputs
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+      if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
 
-      // Raycast launcher: Cmd+K or Ctrl+K
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        setIsCommandPaletteOpen((prev) => !prev);
-        return;
-      }
-
-      if (e.code === 'Space') {
-        e.preventDefault();
-        if (!isTracking) {
-          handleStartTracking();
-        } else if (isBreakOpen) {
-          handleResumeSprint();
-        } else {
-          handleToggleTracking();
-        }
-      } else if (e.key === 'r' || e.key === 'R') {
+      if (e.code === 'KeyR') {
         e.preventDefault();
         recenter();
         if (soundFxEnabled) playChime('calibrate');
-        showToast('Neutral head pose baseline calibrated.');
-      } else if (e.key === 'b' || e.key === 'B') {
-        e.preventDefault();
-        if (isTracking && !isBreakOpen) {
-          handleQuickBreak();
-        }
-      } else if (e.key === 'e' || e.key === 'E') {
-        e.preventDefault();
-        if (isTracking) {
-          handleEndSession();
-        }
-      } else if (e.key === 'm' || e.key === 'M') {
+        showToast('Neutral posture baseline recalibrated.');
+      } else if (e.code === 'KeyM') {
         e.preventDefault();
         setSoundFxEnabled((prev) => {
-          const next = !prev;
-          showToast(next ? 'Auditory alerts enabled' : 'Auditory alerts muted');
-          return next;
+          showToast(!prev ? 'Auditory alerts unmuted' : 'Auditory alerts muted');
+          return !prev;
         });
-      } else if (e.key === 'h' || e.key === 'H') {
+      } else if (e.code === 'KeyH') {
         e.preventDefault();
         setHudEnabled((prev) => {
-          const next = !prev;
-          showToast(next ? 'AI HUD mesh visible' : 'AI HUD mesh hidden');
-          return next;
+          showToast(!prev ? 'HUD overlay shown' : 'HUD overlay hidden');
+          return !prev;
         });
-      } else if (e.key === 't' || e.key === 'T') {
+      } else if (e.code === 'KeyT') {
         e.preventDefault();
         toggleTheme();
-      } else if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+      } else if (e.code === 'KeyE' && isTracking) {
         e.preventDefault();
-        setIsShortcutsOpen((prev) => !prev);
-      } else if (e.key === 'Escape') {
-        setIsPrivacyOpen(false);
-        setIsShareOpen(false);
-        setIsShortcutsOpen(false);
-        setIsAboutOpen(false);
-        setIsSummaryOpen(false);
-        setIsCommandPaletteOpen(false);
+        handleEndSession();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isTracking, isBreakOpen, soundFxEnabled, hudEnabled, theme]);
+  }, [isTracking, soundFxEnabled, theme]);
 
-  const formatRemaining = (ms) => {
-    const s = Math.floor(ms / 1000);
-    const m = Math.floor(s / 60);
-    return `${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
-  };
+  const currentFlowRatio = totalFramesRef.current > 0
+    ? Math.round(((timeInState.focused || 0) / (elapsedMs || 1)) * 100)
+    : 85;
 
-  const currentAvgScore = Math.round(scoreSumRef.current / Math.max(scoreCountRef.current, 1)) || Math.round(score);
-  const currentFlowRatio = Math.round((timeInState.focused / Math.max(elapsedMs, 1)) * 100);
   const currentAlignmentScore = totalFramesRef.current > 0
     ? Math.round((alignedFramesRef.current / totalFramesRef.current) * 100)
-    : 88;
-
-  const tabLabels = {
-    studio: 'Live Studio',
-    biometrics: 'Biometrics & Affect',
-    soundscapes: 'Ambient Audio',
-    timeline: 'Telemetry Analytics',
-    archive: 'Session Archive',
-  };
+    : 90;
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden font-sans select-none">
-      {/* Linear App Shell Sidebar */}
-      <Sidebar
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        isTracking={isTracking}
-        state={state}
-        fps={fps}
-        soundFxEnabled={soundFxEnabled}
-        toggleSoundFx={() => {
-          setSoundFxEnabled(!soundFxEnabled);
-          showToast(!soundFxEnabled ? 'Auditory alerts enabled' : 'Auditory alerts muted');
-        }}
-        theme={theme}
-        toggleTheme={toggleTheme}
-        onCalibrate={() => {
-          recenter();
-          if (soundFxEnabled) playChime('calibrate');
-          showToast('Neutral head pose calibrated.');
-        }}
-        onOpenPrivacy={() => setIsPrivacyOpen(true)}
-        onOpenShortcuts={() => setIsShortcutsOpen(true)}
-        onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
-      />
+    <div className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-heading)] flex flex-col font-sans transition-colors duration-200">
+      {/* Toast Notification */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-xl bg-slate-900/90 text-white border border-emerald-500/30 shadow-2xl text-xs font-semibold flex items-center gap-2 backdrop-blur-md animate-in slide-in-from-bottom-2 duration-150">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span>{toast}</span>
+        </div>
+      )}
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden bg-[var(--bg-primary)]">
-        {/* Linear Header Bar */}
-        <header className="h-12 border-b border-white/5 dark:border-white/5 px-6 flex items-center justify-between shrink-0 bg-[var(--bg-card)] backdrop-blur-md z-20">
-          <div className="flex items-center gap-3 text-xs">
-            <span className="linear-text-muted">FocusLens</span>
-            <span className="linear-text-faint">/</span>
-            <span className="linear-text-heading font-semibold">{tabLabels[activeTab]}</span>
-          </div>
+      {/* STATE 1: LANDING & PERMISSION SCREEN */}
+      {currentScreen === 'landing' && (
+        <LandingScreen
+          engineStatus={engineStatus}
+          engineError={engineError}
+          onStartSession={handleStartSession}
+          onOpenPrivacy={() => setIsPrivacyOpen(true)}
+          onOpenHistory={() => setIsHistoryOpen(true)}
+          hasHistory={history.length > 0}
+        />
+      )}
 
-          <div className="flex items-center gap-2">
-            {/* View Mode Toggle (Studio / Lens) */}
-            <div className="flex items-center linear-inset rounded-lg p-0.5 text-xs">
+      {/* STATE 2: LIVE FOCUS WORKSPACE */}
+      {currentScreen === 'workspace' && (
+        <div className="flex-1 flex flex-col h-full max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-7 gap-5 animate-in fade-in duration-200">
+          {/* Top Bar: Brand, Session Status, Timer, and Compact Controls */}
+          <header className="linear-panel p-3.5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 border border-white/5 shadow-sm">
+            <div className="flex items-center gap-3">
               <button
-                onClick={() => handleSetViewMode('studio')}
-                className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
-                  viewMode === 'studio' ? 'bg-white dark:bg-slate-800 linear-text-heading shadow-sm' : 'linear-text-muted'
-                }`}
+                onClick={() => {
+                  stopTracking();
+                  setCurrentScreen('landing');
+                }}
+                className="flex items-center gap-2 group text-left"
+                title="Return to landing screen"
               >
-                Studio
+                <div className="w-7 h-7 flex items-center justify-center">
+                  <svg viewBox="0 0 32 32" className="w-full h-full">
+                    <circle cx="16" cy="16" r="14" fill="none" stroke="#10B981" strokeWidth="2.5" />
+                    <circle cx="16" cy="16" r="8" fill="#10B981" opacity="0.25" />
+                    <circle cx="16" cy="16" r="3.5" fill="#10B981" />
+                  </svg>
+                </div>
+                <div>
+                  <span className="font-display font-bold text-sm linear-text-heading group-hover:text-emerald-400 transition-colors">
+                    FocusLens
+                  </span>
+                  <span className="block text-[10px] linear-text-muted">Live Workspace</span>
+                </div>
               </button>
-              <button
-                onClick={() => handleSetViewMode('lens')}
-                className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
-                  viewMode === 'lens' ? 'bg-white dark:bg-slate-800 linear-text-heading shadow-sm' : 'linear-text-muted'
-                }`}
-              >
-                Lens
-              </button>
+
+              <div className="h-5 w-px bg-white/10 hidden sm:block" />
+
+              {/* Status Pill */}
+              <div className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-black/30 border border-white/5 text-xs">
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    state === 'focused' ? 'bg-emerald-500 animate-pulse' : state === 'distracted' ? 'bg-amber-500' : 'bg-rose-500'
+                  }`}
+                />
+                <span className="font-medium text-[11px] linear-text-heading capitalize">
+                  {state === 'focused' ? 'Flow State' : state === 'distracted' ? 'Attention Drifting' : 'Fatigue Alert'}
+                </span>
+                <span className="text-[10px] font-mono text-emerald-400 font-semibold">{fps} FPS</span>
+              </div>
             </div>
 
-            {/* AI HUD Toggle */}
-            <button
-              onClick={() => {
-                setHudEnabled(!hudEnabled);
-                showToast(!hudEnabled ? 'AI HUD mesh visible' : 'AI HUD mesh hidden');
-              }}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                hudEnabled
-                  ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-500'
-                  : 'linear-btn-secondary'
-              }`}
-              title="Toggle AI Face &amp; Posture HUD overlay (Press H)"
-            >
-              <Eye className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">HUD</span>
-            </button>
-
-            {/* Recenter Button */}
-            <button
-              onClick={() => {
-                recenter();
-                if (soundFxEnabled) playChime('calibrate');
-                showToast('Neutral head pose calibrated.');
-              }}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg linear-btn-secondary text-xs font-medium"
-              title="Recenter Baseline (Press R)"
-            >
-              <Compass className="w-3.5 h-3.5 text-cyan-400" />
-              <span className="hidden sm:inline">Recenter</span>
-            </button>
-
-            {/* About / System Details */}
-            <button
-              onClick={() => setIsAboutOpen(true)}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg linear-btn-secondary text-xs font-medium"
-              title="About FocusLens Architecture"
-            >
-              <Info className="w-3.5 h-3.5 text-cyan-400" />
-              <span className="hidden md:inline">Docs</span>
-            </button>
-
-            {/* Raycast Trigger */}
-            <button
-              onClick={() => setIsCommandPaletteOpen(true)}
-              className="p-1.5 rounded-lg linear-btn-secondary"
-              title="Open Command Palette (Cmd+K or ?)"
-            >
-              <Command className="w-3.5 h-3.5 linear-text-muted" />
-            </button>
-          </div>
-        </header>
-
-        {/* Dynamic Tab Body */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-7 flex flex-col gap-6">
-          {/* TAB 1: LIVE STUDIO (Hero Camera Stage + Whoop Dial + 3D Posture Hologram + Sprint) */}
-          {activeTab === 'studio' && (
-            <div className="flex flex-col gap-6 max-w-7xl w-full mx-auto animate-in fade-in duration-200">
-              {/* Vercel-Style Product Headline & Privacy Banner */}
-              <div className="linear-panel p-4 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm border border-white/5">
-                <div className="flex items-center gap-3.5">
-                  <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-500 shrink-0">
-                    <ShieldCheck className="w-5 h-5" />
-                  </div>
-                  <div className="flex flex-col">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h1 className="font-display font-bold text-sm linear-text-heading">
-                        FocusLens: Continuous On-Device Cognitive Flow &amp; Ergonomics
-                      </h1>
-                      <span className="px-2 py-0.2 rounded-full text-[9px] font-mono font-bold bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">
-                        Zero Server Telemetry
-                      </span>
-                    </div>
-                    <p className="text-xs linear-text-muted mt-0.5">
-                      Client-side MediaPipe WebAssembly monitors attention dynamics, dry eye blink rates, and 3D head alignment in real time.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0">
+            {/* Sprint Timer Countdown & Duration Buttons */}
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1 linear-inset p-1 rounded-lg text-xs">
+                {[15, 25, 45].map((m) => (
                   <button
-                    onClick={() => setActiveTab('biometrics')}
-                    className="px-3 py-1.5 rounded-lg linear-btn-secondary text-xs font-semibold"
+                    key={m}
+                    onClick={() => {
+                      setSprintMins(m);
+                      sprintEndRef.current = Date.now() + m * 60 * 1000;
+                      setTimeRemainingMs(m * 60 * 1000);
+                      showToast(`Sprint set to ${m} minutes.`);
+                    }}
+                    className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-all ${
+                      sprintMins === m ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'linear-text-muted'
+                    }`}
                   >
-                    Deep Telemetry &rarr;
+                    {m}m
                   </button>
-                </div>
+                ))}
               </div>
 
-              {/* Cockpit Grid: Hero Camera Stage (7 cols) + Whoop Focus Dial (5 cols) */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
-                {/* Hero Camera Viewport */}
-                <div className="lg:col-span-7 flex flex-col gap-4">
-                  <div className="linear-panel p-4 rounded-2xl shadow-xl border border-white/5 h-full flex flex-col justify-between">
-                    <CameraStage
-                      videoRef={videoRef}
-                      hudCanvasRef={hudCanvasRef}
-                      state={state}
-                      viewMode={viewMode}
-                      isTracking={isTracking}
-                      onStartTracking={handleStartTracking}
-                      fps={fps}
-                      isFaceTracked={biometrics.isFaceTracked}
-                      score={score}
-                      alignment={biometrics.alignment}
-                    />
-                  </div>
-                </div>
-
-                {/* Whoop-Style Dominant Focus Score Dial */}
-                <div className="lg:col-span-5 flex flex-col gap-4">
-                  <WhoopFocusDial
-                    score={score}
-                    state={state}
-                    isTracking={isTracking}
-                    streakMs={currentStreakRef.current}
-                    alignmentScore={currentAlignmentScore}
-                    flowRatio={currentFlowRatio}
-                  />
-                </div>
+              <div className="font-mono text-lg font-bold linear-text-heading min-w-[55px] text-center">
+                {formatRemaining(timeRemainingMs)}
               </div>
-
-              {/* Sprint Controller & 3D Hologram Stage Row */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
-                <div className="lg:col-span-7">
-                  <SprintController
-                    durationMinutes={sprintMins}
-                    setDurationMinutes={handleSprintMinsChange}
-                    timeRemainingFormatted={formatRemaining(timeRemainingMs)}
-                    cycleCount={cycleCount}
-                    isTracking={isTracking}
-                    onQuickBreak={handleQuickBreak}
-                    onEndSession={handleEndSession}
-                    onToggleTracking={handleToggleTracking}
-                  />
-                </div>
-
-                <div className="lg:col-span-5 h-64 lg:h-auto">
-                  <ThreeHeadVisualizer
-                    pose={biometrics.pose}
-                    state={state}
-                    isFaceTracked={biometrics.isFaceTracked}
-                  />
-                </div>
-              </div>
-
-              {/* Guided Break Overlay */}
-              <GuidedBreakModal isOpen={isBreakOpen} onResumeSprint={handleResumeSprint} />
             </div>
-          )}
 
-          {/* TAB 2: BIOMETRICS & AFFECT */}
-          {activeTab === 'biometrics' && (
-            <div className="max-w-7xl w-full mx-auto flex flex-col gap-5 animate-in fade-in duration-200">
-              <BiometricsGrid
+            {/* Compact Control Bar */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                onClick={() => {
+                  recenter();
+                  if (soundFxEnabled) playChime('calibrate');
+                  showToast('Neutral posture calibrated.');
+                }}
+                className="p-2 rounded-lg linear-btn-secondary"
+                title="Recenter Baseline (Press R)"
+              >
+                <Compass className="w-4 h-4 text-cyan-400" />
+              </button>
+
+              <button
+                onClick={() => setSoundFxEnabled(!soundFxEnabled)}
+                className="p-2 rounded-lg linear-btn-secondary"
+                title="Toggle focus alert chimes (Press M)"
+              >
+                {soundFxEnabled ? <Volume2 className="w-4 h-4 text-emerald-400" /> : <VolumeX className="w-4 h-4 opacity-50" />}
+              </button>
+
+              <button
+                onClick={() => setHudEnabled(!hudEnabled)}
+                className={`p-2 rounded-lg border transition-colors ${
+                  hudEnabled ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400' : 'linear-btn-secondary'
+                }`}
+                title="Toggle AI HUD mesh (Press H)"
+              >
+                <Eye className="w-4 h-4" />
+              </button>
+
+              <button
+                onClick={toggleTheme}
+                className="p-2 rounded-lg linear-btn-secondary"
+                title="Toggle Theme (Press T)"
+              >
+                {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-700" />}
+              </button>
+
+              <button
+                onClick={() => setIsPrivacyOpen(true)}
+                className="p-2 rounded-lg linear-btn-secondary"
+                title="Privacy Architecture"
+              >
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+              </button>
+
+              {/* End Session Button */}
+              <button
+                onClick={handleEndSession}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-400 text-xs font-bold transition-all shadow-sm"
+                title="End Active Session and View Report (Press E)"
+              >
+                <Square className="w-3.5 h-3.5" />
+                <span>End Session</span>
+                <kbd className="px-1 py-0.2 rounded bg-rose-500/20 text-[9px] font-mono">E</kbd>
+              </button>
+            </div>
+          </header>
+
+          {/* Clean 2-Column Live Workspace Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+            {/* Left Column: Hero Camera Stage with Posture Overlay */}
+            <div className="lg:col-span-7 flex flex-col gap-4">
+              <div className="linear-panel p-4 rounded-2xl shadow-xl border border-white/5">
+                <CameraStage
+                  videoRef={videoRef}
+                  hudCanvasRef={hudCanvasRef}
+                  state={state}
+                  isTracking={isTracking}
+                  onStartTracking={handleStartSession}
+                  fps={fps}
+                  isFaceTracked={biometrics.isFaceTracked}
+                  alignment={biometrics.alignment}
+                  pose={biometrics.pose}
+                />
+              </div>
+            </div>
+
+            {/* Right Column: Dominant Focus Score Dial + 3 Core Biometrics Cards */}
+            <div className="lg:col-span-5 flex flex-col gap-4">
+              <WhoopFocusDial
+                score={score}
+                state={state}
+                isTracking={isTracking}
+                streakMs={currentStreakRef.current}
+                alignmentScore={currentAlignmentScore}
+                flowRatio={currentFlowRatio}
+              />
+
+              <CoreBiometricsStack
                 biometrics={biometrics}
                 state={state}
-                score={score}
                 onRecenter={() => {
                   recenter();
                   if (soundFxEnabled) playChime('calibrate');
-                  showToast('Neutral head pose calibrated.');
+                  showToast('Neutral posture calibrated.');
                 }}
               />
             </div>
-          )}
+          </div>
 
-          {/* TAB 3: AMBIENT SOUNDSCAPES */}
-          {activeTab === 'soundscapes' && (
-            <div className="max-w-7xl w-full mx-auto flex flex-col gap-5 animate-in fade-in duration-200">
-              <AmbientSoundDeck
-                ambientMode={ambientMode}
-                setAmbientMode={handleAmbientChange}
-                volume={ambientVol}
-                setVolume={handleVolumeChange}
-              />
-            </div>
-          )}
-
-          {/* TAB 4: TELEMETRY ANALYTICS & TIMELINE */}
-          {activeTab === 'timeline' && (
-            <div className="max-w-7xl w-full mx-auto flex flex-col gap-5 animate-in fade-in duration-200">
+          {/* Bottom Full-Width Section: Session Timeline & Collapsible Advanced Telemetry */}
+          <div className="flex flex-col gap-4 w-full">
+            <div className="linear-panel p-4 rounded-2xl border border-white/5 shadow-sm">
               <TimelineChart
                 timeline={timeline}
                 elapsedMs={elapsedMs}
                 bestStreakMs={bestStreakMs}
                 maxDistractionMs={maxDistractionMs}
-                avgScore={currentAvgScore}
-                timeInState={timeInState}
                 onExportCsv={handleExportCsv}
                 onExportJson={handleExportJson}
-                onOpenShareCard={() => setIsShareOpen(true)}
-                isTracking={isTracking}
               />
             </div>
-          )}
 
-          {/* TAB 5: ARCHIVE & RECORDS */}
-          {activeTab === 'archive' && (
-            <div className="max-w-7xl w-full mx-auto flex flex-col gap-5 animate-in fade-in duration-200">
-              <HistoryArchive history={history} onClearHistory={handleClearHistory} />
-            </div>
-          )}
-        </main>
-      </div>
+            {/* Collapsible Advanced Telemetry (Gaze Vector, Affect Sentiment, Euler Angles) */}
+            <AdvancedTelemetryDrawer
+              biometrics={biometrics}
+              onRecenter={() => {
+                recenter();
+                if (soundFxEnabled) playChime('calibrate');
+                showToast('Neutral posture calibrated.');
+              }}
+            />
+          </div>
+        </div>
+      )}
 
-      {/* Global Modals & Dialogs */}
-      <CommandPalette
-        isOpen={isCommandPaletteOpen}
-        onClose={() => setIsCommandPaletteOpen(false)}
-        isTracking={isTracking}
-        onStartTracking={handleStartTracking}
-        onToggleTracking={handleToggleTracking}
-        onRecenter={() => {
-          recenter();
-          if (soundFxEnabled) playChime('calibrate');
-          showToast('Neutral head pose calibrated.');
-        }}
-        onTakeBreak={handleQuickBreak}
-        onEndSession={handleEndSession}
-        soundFxEnabled={soundFxEnabled}
-        onToggleSound={() => {
-          setSoundFxEnabled(!soundFxEnabled);
-          showToast(!soundFxEnabled ? 'Auditory alerts enabled' : 'Auditory alerts muted');
-        }}
-        hudEnabled={hudEnabled}
-        onToggleHud={() => {
-          setHudEnabled(!hudEnabled);
-          showToast(!hudEnabled ? 'AI HUD mesh visible' : 'AI HUD mesh hidden');
-        }}
-        theme={theme}
-        onToggleTheme={toggleTheme}
-        onExportCsv={handleExportCsv}
-        onExportJson={handleExportJson}
-        onOpenShareCard={() => setIsShareOpen(true)}
-        onOpenPrivacy={() => setIsPrivacyOpen(true)}
-        onOpenAbout={() => setIsAboutOpen(true)}
-      />
-
-      <PrivacyModal isOpen={isPrivacyOpen} onClose={() => setIsPrivacyOpen(false)} />
-      <AboutModal isOpen={isAboutOpen} onClose={() => setIsAboutOpen(false)} />
-      <KeyboardShortcutsModal isOpen={isShortcutsOpen} onClose={() => setIsShortcutsOpen(false)} />
+      {/* STATE 3: SESSION SUMMARY MODAL / SCREEN */}
       <SessionSummaryModal
         isOpen={isSummaryOpen}
         onClose={() => setIsSummaryOpen(false)}
         sessionStats={sessionSummaryData}
-        onStartNewSprint={() => {
-          setIsSummaryOpen(false);
-          handleStartTracking();
-        }}
-        onTakeBreak={() => {
-          setIsSummaryOpen(false);
-          handleQuickBreak();
-        }}
+        onStartNewSprint={handleStartSession}
         onExportCsv={handleExportCsv}
-        onOpenShareCard={() => {
-          setIsSummaryOpen(false);
-          setIsShareOpen(true);
-        }}
-      />
-      <ShareModal
-        isOpen={isShareOpen}
-        onClose={() => setIsShareOpen(false)}
-        avgScore={currentAvgScore}
-        durationMs={elapsedMs}
-        flowPct={Math.round((timeInState.focused / Math.max(elapsedMs, 1)) * 100)}
-        bestStreakMs={bestStreakMs}
-        yawns={biometrics.yawnsDetected}
+        onExportJson={handleExportJson}
       />
 
-      {/* Toast Notification */}
-      {toast && (
-        <div className="fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-lg linear-panel shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-3 duration-200 text-xs font-semibold linear-text-heading border border-white/10">
-          {toast}
+      {/* Privacy Guarantee Modal */}
+      <PrivacyModal
+        isOpen={isPrivacyOpen}
+        onClose={() => setIsPrivacyOpen(false)}
+      />
+
+      {/* Past Sessions History Modal */}
+      {isHistoryOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+          <div className="relative w-full max-w-2xl p-6 linear-panel rounded-2xl shadow-2xl flex flex-col gap-4 border border-white/10 max-h-[85vh] overflow-hidden">
+            <div className="flex items-center justify-between pb-3 border-b border-white/5">
+              <div className="flex items-center gap-2">
+                <History className="w-5 h-5 text-cyan-400" />
+                <h3 className="font-display text-base font-bold linear-text-heading">
+                  Past Focus Sessions (IndexedDB)
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsHistoryOpen(false)}
+                className="p-1.5 rounded-lg linear-btn-secondary"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1">
+              <HistoryArchive
+                history={history}
+                onClearHistory={async () => {
+                  try {
+                    for (const s of history) {
+                      await deleteSessionFromDB(s.id);
+                    }
+                    setHistory([]);
+                    showToast('History cleared.');
+                  } catch (err) {
+                    console.error('Failed to clear history:', err);
+                  }
+                }}
+              />
+            </div>
+          </div>
         </div>
       )}
     </div>
