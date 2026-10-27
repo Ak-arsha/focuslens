@@ -62,41 +62,9 @@ FocusLens eliminates this compromise. Powered by Google MediaPipe Tasks Vision r
 
 ### System Architecture
 
-```text
-+-----------------------------------------------------------------------+
-|                       Client Browser Runtime                          |
-|                                                                       |
-|   Webcam Video Stream (navigator.mediaDevices.getUserMedia)           |
-|                              |                                        |
-|                              v                                        |
-|   HTML5 Video Element (Buffered in memory, no storage)                |
-|                              |                                        |
-|                              v                                        |
-|   Google MediaPipe Face Landmarker (WebAssembly / WebGL)              |
-|                              |                                        |
-|         +--------------------+--------------------+                   |
-|         |                    |                    |                   |
-|         v                    v                    v                   |
-|   478 Face Landmarks   47 Blendshapes     4x4 Transform Matrix        |
-|         |                    |                    |                   |
-|         v                    v                    v                   |
-|   Eye Aspect Ratio     Gaze & Jaw Open     Yaw, Pitch, Roll           |
-|   & Blink Counter      Estimation          Calculation                |
-|         |                    |                    |                   |
-|         +--------------------+--------------------+                   |
-|                              |                                        |
-|                              v                                        |
-|                 Adaptive Scoring Algorithm                            |
-|                              |                                        |
-|         +--------------------+--------------------+                   |
-|         |                    |                    |                   |
-|         v                    v                    v                   |
-|   HUD Canvas Overlay   Telemetry Cards     Interactive Timeline       |
-|   & Audio Chimes       & Sprint Engine     & LocalStorage Export      |
-|                                                                       |
-|                   Zero Network Data Transmission                      |
-+-----------------------------------------------------------------------+
-```
+The following diagram illustrates the end-to-end FocusLens pipeline, from webcam input and on-device facial landmark processing to real-time biometric analysis, adaptive focus scoring, and visualization. All video processing occurs locally in the browser.
+
+![FocusLens System Architecture](docs/images/architecture.png)
 
 ---
 
@@ -119,6 +87,9 @@ Live URL: [https://focuslens-lilac.vercel.app](https://focuslens-lilac.vercel.ap
 
 ```text
 focuslens/
+├── docs/
+│   └── images/
+│       └── architecture.png
 ├── .gitignore          # Git exclusion rules (build artifacts, .vercel)
 ├── LICENSE             # MIT Open Source License
 ├── README.md           # Comprehensive project documentation
