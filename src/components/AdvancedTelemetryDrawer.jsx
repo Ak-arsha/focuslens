@@ -3,7 +3,11 @@ import { ChevronDown, ChevronUp, Activity, Smile, Crosshair, Compass } from 'luc
 
 export const AdvancedTelemetryDrawer = ({ biometrics, onRecenter }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const { gazeDirection, sentiment, pose, alignment } = biometrics;
+  const {
+    gazeDirection = 'Center',
+    sentiment = { label: 'Calm Flow', valence: 50, description: 'Neutral facial tone in steady flow state' },
+    pose = { yaw: 0, pitch: 0, roll: 0 }
+  } = biometrics || {};
 
   const gazeDirections = [
     'Top-Left', 'Up', 'Top-Right',
@@ -11,16 +15,19 @@ export const AdvancedTelemetryDrawer = ({ biometrics, onRecenter }) => {
     'Bottom-Left', 'Down', 'Bottom-Right'
   ];
 
+  const safeValence = sentiment?.valence ?? 50;
+  const safePose = pose || { yaw: 0, pitch: 0, roll: 0 };
+
   return (
-    <div className="w-full linear-panel rounded-2xl border border-white/5 overflow-hidden transition-all duration-200">
+    <div className="w-full linear-panel rounded-2xl border border-white/5 overflow-hidden transition-all duration-200 select-none">
       {/* Drawer Header & Toggle Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="w-full p-4 flex items-center justify-between linear-btn-ghost text-xs font-semibold select-none"
       >
         <div className="flex items-center gap-2.5">
-          <Activity className="w-4 h-4 text-emerald-500" />
-          <span className="linear-text-heading font-display">Advanced Telemetry &amp; Affect Metrics</span>
+          <Activity className="w-4 h-4 text-emerald-400" />
+          <span className="linear-text-heading font-display">Advanced Biometric Affect &amp; Orientation</span>
           <span className="px-2 py-0.5 rounded text-[9px] font-mono uppercase bg-white/5 text-slate-400">
             {isOpen ? 'Expanded' : 'Collapsed'}
           </span>
@@ -53,7 +60,7 @@ export const AdvancedTelemetryDrawer = ({ biometrics, onRecenter }) => {
               <div className="flex justify-between items-baseline text-xs">
                 <span className="text-[11px] linear-text-muted">Emotional Valence</span>
                 <span className="font-mono text-xs font-semibold linear-text-heading">
-                  {sentiment ? (sentiment.valence >= 0 ? `+${sentiment.valence}%` : `${sentiment.valence}%`) : '0%'}
+                  {safeValence >= 0 ? `+${safeValence}%` : `${safeValence}%`}
                 </span>
               </div>
 
@@ -63,10 +70,10 @@ export const AdvancedTelemetryDrawer = ({ biometrics, onRecenter }) => {
                   className="absolute top-0 bottom-0 transition-all duration-200 rounded-full"
                   style={{
                     left: '50%',
-                    width: `${Math.min(50, Math.abs(sentiment?.valence || 0) / 2)}%`,
-                    transform: (sentiment?.valence || 0) < 0 ? 'scaleX(-1)' : 'none',
+                    width: `${Math.min(50, Math.abs(safeValence) / 2)}%`,
+                    transform: safeValence < 0 ? 'scaleX(-1)' : 'none',
                     transformOrigin: 'left',
-                    backgroundColor: (sentiment?.valence || 0) >= 0 ? '#10B981' : '#F43F5E'
+                    backgroundColor: safeValence >= 0 ? '#10B981' : '#F43F5E'
                   }}
                 />
                 <span className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-slate-600" />
@@ -135,9 +142,9 @@ export const AdvancedTelemetryDrawer = ({ biometrics, onRecenter }) => {
 
             <div className="flex flex-col gap-2">
               {[
-                { label: 'Yaw', val: pose.yaw, safe: 14 },
-                { label: 'Pitch', val: pose.pitch, safe: 12 },
-                { label: 'Roll', val: pose.roll, safe: 10 },
+                { label: 'Yaw', val: safePose.yaw ?? 0, safe: 14 },
+                { label: 'Pitch', val: safePose.pitch ?? 0, safe: 12 },
+                { label: 'Roll', val: safePose.roll ?? 0, safe: 10 },
               ].map((axis) => {
                 const isSafe = Math.abs(axis.val) <= axis.safe;
                 return (

@@ -1,8 +1,15 @@
 import React from 'react';
 import { Eye, ShieldCheck, Moon, AlertTriangle, CheckCircle2, Compass } from 'lucide-react';
 
-export const CoreBiometricsStack = ({ biometrics, state, onRecenter }) => {
-  const { ear, bpm, yawnsDetected, microsleepCount, alignment, pose } = biometrics;
+export const CoreBiometricsStack = ({ biometrics, state = 'idle', onRecenter }) => {
+  const {
+    ear = 0,
+    bpm = null,
+    yawnsDetected = 0,
+    microsleepCount = 0,
+    alignment = { isAligned: true, status: 'Optimal Posture', cue: 'Aligned with screen center' },
+    pose = { yaw: 0, pitch: 0, roll: 0 }
+  } = biometrics || {};
 
   const getBpmTag = () => {
     if (bpm === null) return { text: 'Analyzing...', color: 'text-slate-400 bg-slate-800' };
@@ -23,9 +30,12 @@ export const CoreBiometricsStack = ({ biometrics, state, onRecenter }) => {
 
   const bpmTag = getBpmTag();
   const fatigueTag = getFatigueTag();
+  const safeEar = typeof ear === 'number' ? ear : 0;
+  const safePose = pose || { yaw: 0, pitch: 0, roll: 0 };
+  const safeAlignment = alignment || { isAligned: true, status: 'Optimal Posture' };
 
   return (
-    <div className="flex flex-col gap-3.5 w-full">
+    <div className="flex flex-col gap-3.5 w-full select-none">
       {/* 1. Blink Rate & Eye-Strain Risk */}
       <div className="linear-panel p-4 rounded-xl flex flex-col justify-between gap-2.5 border border-white/5">
         <div className="flex items-center justify-between">
@@ -51,7 +61,7 @@ export const CoreBiometricsStack = ({ biometrics, state, onRecenter }) => {
 
           <div className="text-right">
             <span className="text-[11px] linear-text-muted block">Eye Openness (EAR)</span>
-            <b className="font-mono text-lg font-bold linear-text-heading mt-0.5">{ear.toFixed(2)}</b>
+            <b className="font-mono text-lg font-bold linear-text-heading mt-0.5">{safeEar.toFixed(2)}</b>
           </div>
         </div>
 
@@ -59,7 +69,7 @@ export const CoreBiometricsStack = ({ biometrics, state, onRecenter }) => {
         <div className="w-full h-1.5 rounded-full bg-slate-800 overflow-hidden">
           <div
             className="h-full bg-emerald-500 rounded-full transition-all duration-150"
-            style={{ width: `${Math.min(100, (ear / 0.35) * 100)}%` }}
+            style={{ width: `${Math.min(100, (safeEar / 0.35) * 100)}%` }}
           />
         </div>
       </div>
@@ -75,13 +85,13 @@ export const CoreBiometricsStack = ({ biometrics, state, onRecenter }) => {
           </div>
           <span
             className={`px-2 py-0.5 text-[10px] font-mono font-bold rounded-full border flex items-center gap-1 ${
-              alignment.isAligned
+              safeAlignment.isAligned
                 ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30'
                 : 'text-amber-400 bg-amber-500/10 border-amber-500/30'
             }`}
           >
-            {alignment.isAligned ? <CheckCircle2 className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
-            <span>{alignment.status}</span>
+            {safeAlignment.isAligned ? <CheckCircle2 className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
+            <span>{safeAlignment.status}</span>
           </span>
         </div>
 
@@ -89,20 +99,20 @@ export const CoreBiometricsStack = ({ biometrics, state, onRecenter }) => {
           <div className="flex items-center gap-4 font-mono">
             <div>
               <span className="text-[10px] linear-text-muted uppercase block">Yaw</span>
-              <span className={Math.abs(pose.yaw) > 14 ? 'text-amber-400 font-bold' : 'linear-text-heading'}>
-                {pose.yaw}&deg;
+              <span className={Math.abs(safePose.yaw || 0) > 14 ? 'text-amber-400 font-bold' : 'linear-text-heading'}>
+                {safePose.yaw || 0}&deg;
               </span>
             </div>
             <div>
               <span className="text-[10px] linear-text-muted uppercase block">Pitch</span>
-              <span className={Math.abs(pose.pitch) > 12 ? 'text-amber-400 font-bold' : 'linear-text-heading'}>
-                {pose.pitch}&deg;
+              <span className={Math.abs(safePose.pitch || 0) > 12 ? 'text-amber-400 font-bold' : 'linear-text-heading'}>
+                {safePose.pitch || 0}&deg;
               </span>
             </div>
             <div>
               <span className="text-[10px] linear-text-muted uppercase block">Roll</span>
-              <span className={Math.abs(pose.roll) > 10 ? 'text-amber-400 font-bold' : 'linear-text-heading'}>
-                {pose.roll}&deg;
+              <span className={Math.abs(safePose.roll || 0) > 10 ? 'text-amber-400 font-bold' : 'linear-text-heading'}>
+                {safePose.roll || 0}&deg;
               </span>
             </div>
           </div>

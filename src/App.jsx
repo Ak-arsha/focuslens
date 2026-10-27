@@ -606,8 +606,11 @@ export function App() {
               elapsedMs={elapsedMs}
               bestStreakMs={bestStreakMs}
               maxDistractionMs={maxDistractionMs}
+              avgScore={Math.round(score)}
+              timeInState={timeInState}
               onExportCsv={handleExportCsv}
               onExportJson={handleExportJson}
+              isTracking={isTracking}
             />
           </div>
 

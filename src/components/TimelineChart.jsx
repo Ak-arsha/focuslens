@@ -1,17 +1,16 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Download, FileJson, Share2 } from 'lucide-react';
+import { Download, FileJson } from 'lucide-react';
 
 export const TimelineChart = ({
-  timeline,
-  elapsedMs,
-  bestStreakMs,
-  maxDistractionMs,
-  avgScore,
-  timeInState,
+  timeline = [],
+  elapsedMs = 0,
+  bestStreakMs = 0,
+  maxDistractionMs = 0,
+  avgScore = 80,
+  timeInState = { focused: 0, distracted: 0, drowsy: 0 },
   onExportCsv,
   onExportJson,
-  onOpenShareCard,
-  isTracking,
+  isTracking = false,
 }) => {
   const canvasRef = useRef(null);
   const [tooltip, setTooltip] = useState(null);
@@ -27,10 +26,11 @@ export const TimelineChart = ({
     return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
   };
 
-  const totalTime = timeInState.focused + timeInState.distracted + timeInState.drowsy || 1;
-  const pctFlow = Math.round((timeInState.focused / totalTime) * 100);
-  const pctDrift = Math.round((timeInState.distracted / totalTime) * 100);
-  const pctFatigue = Math.round((timeInState.drowsy / totalTime) * 100);
+  const safeTime = timeInState || { focused: 0, distracted: 0, drowsy: 0 };
+  const totalTime = (safeTime.focused || 0) + (safeTime.distracted || 0) + (safeTime.drowsy || 0) || 1;
+  const pctFlow = Math.round(((safeTime.focused || 0) / totalTime) * 100);
+  const pctDrift = Math.round(((safeTime.distracted || 0) / totalTime) * 100);
+  const pctFatigue = Math.round(((safeTime.drowsy || 0) / totalTime) * 100);
 
   const getGrade = (score) => {
     if (score >= 88) return 'Grade S - Elite Flow';
@@ -62,7 +62,7 @@ export const TimelineChart = ({
 
     const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
 
-    // Subtle threshold reference lines
+    // Threshold guidelines
     ctx.strokeStyle = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)';
     ctx.lineWidth = 1;
     [0.8, 0.4].forEach(level => {
@@ -73,154 +73,136 @@ export const TimelineChart = ({
       ctx.stroke();
     });
 
-    if (!timeline.length) {
+    if (!timeline || timeline.length < 2) {
+      // Empty state guidance
       ctx.fillStyle = isDark ? '#64748B' : '#94A3B8';
-      ctx.font = '12px Plus Jakarta Sans, sans-serif';
-      ctx.fillText('Start your camera session to chart real-time attention telemetry.', 16, h / 2 + 4);
+      ctx.font = '11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(
+        isTracking
+          ? 'Sampling second-by-second focus telemetry...'
+          : 'Telemetry Timeline Standby - Start a camera session to begin streaming',
+        w / 2,
+        h / 2
+      );
       ctx.restore();
       return;
     }
 
-    const barWidth = w / Math.max(timeline.length, 90);
+    const padLeft = 10;
+    const padRight = 10;
+    const padTop = 15;
+    const padBottom = 20;
+    const plotW = w - padLeft - padRight;
+    const plotH = h - padTop - padBottom;
 
-    timeline.forEach((pt, i) => {
-      const color =
-        pt.st === 'focused' ? '#10B981' : pt.st === 'distracted' ? '#F59E0B' : '#F43F5E';
-      ctx.fillStyle = color;
-      ctx.globalAlpha = 0.85;
-      const barHeight = Math.max(3, (pt.s / 100) * (h - 14));
-      const x = i * barWidth;
-      const y = h - barHeight;
+    const minT = timeline[0].t;
+    const maxT = Math.max(timeline[timeline.length - 1].t, minT + 10);
 
-      ctx.fillRect(x, y, Math.max(barWidth - 1, 1), barHeight);
-    });
+    const getX = t => padLeft + ((t - minT) / (maxT - minT)) * plotW;
+    const getY = s => padTop + (1 - s / 100) * plotH;
+
+    // Gradient fill under the curve
+    const areaGrad = ctx.createLinearGradient(0, padTop, 0, padTop + plotH);
+    areaGrad.addColorStop(0, 'rgba(16, 185, 129, 0.35)');
+    areaGrad.addColorStop(0.5, 'rgba(16, 185, 129, 0.12)');
+    areaGrad.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
+
+    ctx.beginPath();
+    ctx.moveTo(getX(timeline[0].t), getY(timeline[0].s));
+    for (let i = 1; i < timeline.length; i++) {
+      const prev = timeline[i - 1];
+      const curr = timeline[i];
+      const midX = (getX(prev.t) + getX(curr.t)) / 2;
+      const midY = (getY(prev.s) + getY(curr.s)) / 2;
+      ctx.quadraticCurveTo(getX(prev.t), getY(prev.s), midX, midY);
+    }
+    const last = timeline[timeline.length - 1];
+    ctx.lineTo(getX(last.t), getY(last.s));
+    ctx.lineTo(getX(last.t), padTop + plotH);
+    ctx.lineTo(getX(timeline[0].t), padTop + plotH);
+    ctx.closePath();
+    ctx.fillStyle = areaGrad;
+    ctx.fill();
+
+    // Primary score curve stroke
+    ctx.beginPath();
+    ctx.moveTo(getX(timeline[0].t), getY(timeline[0].s));
+    for (let i = 1; i < timeline.length; i++) {
+      const prev = timeline[i - 1];
+      const curr = timeline[i];
+      const midX = (getX(prev.t) + getX(curr.t)) / 2;
+      const midY = (getY(prev.s) + getY(curr.s)) / 2;
+      ctx.quadraticCurveTo(getX(prev.t), getY(prev.s), midX, midY);
+    }
+    ctx.lineTo(getX(last.t), getY(last.s));
+    ctx.strokeStyle = '#10B981';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
 
     ctx.restore();
-  }, [timeline]);
-
-  const handleMouseMove = (e) => {
-    const canvas = canvasRef.current;
-    if (!canvas || !timeline.length) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const barWidth = rect.width / Math.max(timeline.length, 90);
-    const index = Math.floor(mouseX / barWidth);
-
-    if (index >= 0 && index < timeline.length) {
-      setTooltip({ x: mouseX, point: timeline[index] });
-    }
-  };
+  }, [timeline, isTracking]);
 
   return (
-    <div className="theme-panel w-full flex flex-col gap-4 p-5 rounded-xl shadow-sm">
+    <div className="w-full flex flex-col gap-3.5 select-none">
+      {/* Top Header Controls */}
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <div>
-          <span className="text-[10px] font-bold uppercase tracking-wider theme-text-faint block">
-            Longitudinal Telemetry
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold uppercase tracking-wider linear-text-heading">
+            Live Telemetry Timeline
           </span>
-          <h2 className="font-display text-base font-bold theme-text-heading">Session Focus Timeline</h2>
+          <span className="text-[10px] linear-text-faint font-mono">
+            {timeline.length} samples recorded
+          </span>
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2">
           <button
             onClick={onExportCsv}
             disabled={!timeline.length}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg theme-btn-secondary disabled:opacity-40 text-xs font-semibold"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg linear-btn-secondary text-xs font-semibold disabled:opacity-40"
+            title="Download CSV"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>Export CSV</span>
+            <span>CSV</span>
           </button>
           <button
             onClick={onExportJson}
             disabled={!timeline.length}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg theme-btn-secondary disabled:opacity-40 text-xs font-semibold"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg linear-btn-secondary text-xs font-semibold disabled:opacity-40"
+            title="Download JSON"
           >
             <FileJson className="w-3.5 h-3.5" />
-            <span>Export JSON</span>
-          </button>
-          <button
-            onClick={onOpenShareCard}
-            disabled={!timeline.length}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg theme-btn-secondary disabled:opacity-40 text-xs font-semibold"
-          >
-            <Share2 className="w-3.5 h-3.5" />
-            <span>Share Card</span>
+            <span>JSON</span>
           </button>
         </div>
       </div>
 
-      {/* Canvas Chart with Interactive Scrubbing */}
-      <div className="theme-inset relative w-full h-44 rounded-lg overflow-hidden">
-        <canvas
-          ref={canvasRef}
-          onMouseMove={handleMouseMove}
-          onMouseLeave={() => setTooltip(null)}
-          className="w-full h-full block cursor-crosshair"
-        />
-
-        {tooltip && (
-          <div
-            className="absolute top-2.5 -translate-x-1/2 theme-panel px-2.5 py-1.5 rounded shadow-xl text-xs pointer-events-none z-30 backdrop-blur-md"
-            style={{ left: `${tooltip.x}px` }}
-          >
-            <span className="text-[10px] font-mono theme-text-muted block">
-              {formatTime(tooltip.point.t * 1000)}
-            </span>
-            <div className="flex items-center gap-2 mt-0.5">
-              <b className="font-mono text-emerald-500 dark:text-emerald-400">{tooltip.point.s} / 100</b>
-              <span className="capitalize theme-text-body">{tooltip.point.st}</span>
-            </div>
-          </div>
-        )}
+      {/* High-DPI Canvas Viewport */}
+      <div className="relative w-full h-36 linear-inset rounded-xl p-2 overflow-hidden">
+        <canvas ref={canvasRef} className="w-full h-full block" />
       </div>
 
-      {/* KPI Stats Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="theme-inset p-3 rounded-lg">
-          <span className="text-[10px] font-semibold uppercase theme-text-faint block">Session Duration</span>
-          <b className="font-mono text-xl theme-text-heading">{formatTime(elapsedMs)}</b>
-          <span className="text-[10px] theme-text-muted block mt-0.5">Active Tracking</span>
+      {/* KPI Breakdown Strip */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+        <div className="linear-inset p-2.5 rounded-lg flex flex-col">
+          <span className="text-[10px] linear-text-faint uppercase font-semibold">Active Duration</span>
+          <b className="font-mono text-sm linear-text-heading mt-0.5">{formatTime(elapsedMs)}</b>
         </div>
-        <div className="theme-inset p-3 rounded-lg">
-          <span className="text-[10px] font-semibold uppercase theme-text-faint block">Longest Flow Streak</span>
-          <b className="font-mono text-xl text-emerald-500 dark:text-emerald-400">{formatTime(bestStreakMs)}</b>
-          <span className="text-[10px] theme-text-muted block mt-0.5">Uninterrupted Flow</span>
-        </div>
-        <div className="theme-inset p-3 rounded-lg">
-          <span className="text-[10px] font-semibold uppercase theme-text-faint block">Longest Distraction</span>
-          <b className="font-mono text-xl text-amber-500 dark:text-amber-400">{formatTime(maxDistractionMs)}</b>
-          <span className="text-[10px] theme-text-muted block mt-0.5">Max Drift Time</span>
-        </div>
-        <div className="theme-inset p-3 rounded-lg">
-          <span className="text-[10px] font-semibold uppercase theme-text-faint block">Mean Focus Score</span>
-          <b className="font-mono text-xl theme-text-heading">{isTracking ? avgScore : '-'}</b>
-          <span className="text-[10px] font-bold text-emerald-500 dark:text-emerald-400 block mt-0.5">
-            {isTracking ? getGrade(avgScore) : '-'}
-          </span>
-        </div>
-      </div>
 
-      {/* Distribution Bar */}
-      <div className="flex flex-col gap-2">
-        <div className="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden flex">
-          <div className="h-full bg-emerald-500 transition-all duration-300" style={{ width: `${pctFlow}%` }} />
-          <div className="h-full bg-amber-500 transition-all duration-300" style={{ width: `${pctDrift}%` }} />
-          <div className="h-full bg-rose-500 transition-all duration-300" style={{ width: `${pctFatigue}%` }} />
+        <div className="linear-inset p-2.5 rounded-lg flex flex-col">
+          <span className="text-[10px] linear-text-faint uppercase font-semibold">Peak Flow Streak</span>
+          <b className="font-mono text-sm text-emerald-400 mt-0.5">{formatTime(bestStreakMs)}</b>
         </div>
-        <div className="flex items-center gap-4 text-xs theme-text-muted">
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-500" />
-            <span>In Flow <strong className="theme-text-heading">{pctFlow}%</strong></span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-amber-500" />
-            <span>Distracted <strong className="theme-text-heading">{pctDrift}%</strong></span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-rose-500" />
-            <span>Fatigued <strong className="theme-text-heading">{pctFatigue}%</strong></span>
-          </div>
+
+        <div className="linear-inset p-2.5 rounded-lg flex flex-col">
+          <span className="text-[10px] linear-text-faint uppercase font-semibold">Max Distraction</span>
+          <b className="font-mono text-sm text-amber-400 mt-0.5">{formatTime(maxDistractionMs)}</b>
+        </div>
+
+        <div className="linear-inset p-2.5 rounded-lg flex flex-col">
+          <span className="text-[10px] linear-text-faint uppercase font-semibold">Mean Flow Ratio</span>
+          <b className="font-mono text-sm text-cyan-400 mt-0.5">{pctFlow}%</b>
         </div>
       </div>
     </div>
