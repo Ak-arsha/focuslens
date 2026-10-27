@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { LandingScreen } from './components/LandingScreen';
 import { CameraStage } from './components/CameraStage';
 import { WhoopFocusDial } from './components/WhoopFocusDial';
 import { CoreBiometricsStack } from './components/CoreBiometricsStack';
@@ -23,7 +22,8 @@ import {
   History,
   X,
   Play,
-  Pause
+  Pause,
+  Activity
 } from 'lucide-react';
 
 const THEME_KEY = 'focuslens:theme';
@@ -33,8 +33,7 @@ export function App() {
   const videoRef = useRef(null);
   const hudCanvasRef = useRef(null);
 
-  // High-level Screen State: 'landing' | 'workspace'
-  const [currentScreen, setCurrentScreen] = useState('landing');
+  // App Theme & Controls
   const [theme, setTheme] = useState('dark');
   const [soundFxEnabled, setSoundFxEnabled] = useState(true);
   const [hudEnabled, setHudEnabled] = useState(true);
@@ -60,7 +59,7 @@ export function App() {
   const [sessionSummaryData, setSessionSummaryData] = useState(null);
   const [toast, setToast] = useState(null);
 
-  // Refs for tracking continuous telemetry
+  // Continuous tracking refs
   const scoreRef = useRef(85);
   const scoreSumRef = useRef(0);
   const scoreCountRef = useRef(0);
@@ -86,7 +85,7 @@ export function App() {
       const now = performance.now();
       setState(detectedState);
 
-      // Adaptive Focus Score Engine
+      // Adaptive Flow Scoring
       const targetScore = TARGET_SCORES[detectedState] ?? 80;
       const alpha = 0.08;
       const nextScore = Math.max(0, Math.min(100, scoreRef.current + alpha * (targetScore - scoreRef.current)));
@@ -96,7 +95,7 @@ export function App() {
       scoreSumRef.current += nextScore;
       scoreCountRef.current += 1;
 
-      // Track streaks and distractions
+      // Track streaks & distraction
       if (detectedState === 'focused') {
         currentStreakRef.current += dt;
         distractionStreakRef.current = 0;
@@ -112,7 +111,7 @@ export function App() {
           setMaxDistractionMs(distractionStreakRef.current);
         }
 
-        // Auditory alert chimes for prolonged distraction or fatigue
+        // Auditory cues for drift or drowsiness
         if (soundFxEnabled && now - lastAudioWarningRef.current > 12000) {
           if (detectedState === 'drowsy') {
             playChime('alert');
@@ -124,16 +123,14 @@ export function App() {
         }
       }
 
-      // Track frame alignment
       totalFramesRef.current += 1;
 
-      // Update time spent per state
       setTimeInState((prev) => ({
         ...prev,
         [detectedState]: (prev[detectedState] || 0) + dt,
       }));
 
-      // Log timeline telemetry samples every 1000ms
+      // Log timeline telemetry every 1000ms
       if (now - lastTimelineLogRef.current >= 1000) {
         lastTimelineLogRef.current = now;
         const currentElapsed = sessionStartTimeRef.current ? now - sessionStartTimeRef.current : 0;
@@ -166,7 +163,7 @@ export function App() {
     recenter,
   } = useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, handleStateTick);
 
-  // Update posture alignment counters
+  // Posture frame counter
   useEffect(() => {
     if (isTracking && biometrics.alignment?.isAligned) {
       alignedFramesRef.current += 1;
@@ -240,11 +237,10 @@ export function App() {
       setTimeline([]);
       setTimeInState({ focused: 0, distracted: 0, drowsy: 0 });
 
-      setCurrentScreen('workspace');
       if (soundFxEnabled) playChime('start');
-      showToast('Session commenced. Focus & Posture active.');
-    } catch {
-      // Error handled by engineError state machine
+      showToast('Camera active. Telemetry running.');
+    } catch (err) {
+      console.warn('Start session aborted:', err);
     }
   };
 
@@ -340,11 +336,15 @@ export function App() {
     const handleKeyDown = (e) => {
       if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
 
-      if (e.code === 'KeyR') {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        if (!isTracking) handleStartSession();
+        else stopTracking();
+      } else if (e.code === 'KeyR') {
         e.preventDefault();
         recenter();
         if (soundFxEnabled) playChime('calibrate');
-        showToast('Neutral posture baseline recalibrated.');
+        showToast('Neutral posture baseline calibrated.');
       } else if (e.code === 'KeyM') {
         e.preventDefault();
         setSoundFxEnabled((prev) => {
@@ -382,144 +382,165 @@ export function App() {
     <div className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-heading)] flex flex-col font-sans transition-colors duration-200">
       {/* Toast Notification */}
       {toast && (
-        <div className="fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-xl bg-slate-900/90 text-white border border-emerald-500/30 shadow-2xl text-xs font-semibold flex items-center gap-2 backdrop-blur-md animate-in slide-in-from-bottom-2 duration-150">
+        <div className="fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-xl bg-slate-900/95 text-white border border-emerald-500/40 shadow-2xl text-xs font-semibold flex items-center gap-2 backdrop-blur-md animate-in slide-in-from-bottom-2 duration-150">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
           <span>{toast}</span>
         </div>
       )}
 
-      {/* STATE 1: LANDING & PERMISSION SCREEN */}
-      {currentScreen === 'landing' && (
-        <LandingScreen
-          engineStatus={engineStatus}
-          engineError={engineError}
-          onStartSession={handleStartSession}
-          onOpenPrivacy={() => setIsPrivacyOpen(true)}
-          onOpenHistory={() => setIsHistoryOpen(true)}
-          hasHistory={history.length > 0}
-        />
-      )}
+      {/* Main FocusLens Cockpit Container */}
+      <div className="flex-1 flex flex-col max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-7 gap-5 animate-in fade-in duration-200">
+        {/* Linear Header Bar */}
+        <header className="linear-panel p-3.5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 border border-white/5 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 flex items-center justify-center">
+                <svg viewBox="0 0 32 32" className="w-full h-full">
+                  <circle cx="16" cy="16" r="14" fill="none" stroke="#10B981" strokeWidth="2.5" />
+                  <circle cx="16" cy="16" r="8" fill="#10B981" opacity="0.25" />
+                  <circle cx="16" cy="16" r="3.5" fill="#10B981" />
+                </svg>
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-display font-bold text-sm linear-text-heading">FocusLens</span>
+                  <span className="px-1.5 py-0.2 rounded text-[9px] font-mono uppercase font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    v2.0
+                  </span>
+                </div>
+                <span className="text-[10px] linear-text-muted">On-Device AI Cockpit</span>
+              </div>
+            </div>
 
-      {/* STATE 2: LIVE FOCUS WORKSPACE */}
-      {currentScreen === 'workspace' && (
-        <div className="flex-1 flex flex-col h-full max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-7 gap-5 animate-in fade-in duration-200">
-          {/* Top Bar: Brand, Session Status, Timer, and Compact Controls */}
-          <header className="linear-panel p-3.5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 border border-white/5 shadow-sm">
-            <div className="flex items-center gap-3">
+            <div className="h-5 w-px bg-white/10 hidden sm:block" />
+
+            {/* Live Session Status Pill */}
+            <div className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-black/30 border border-white/5 text-xs">
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  state === 'focused' ? 'bg-emerald-500 animate-pulse' : state === 'distracted' ? 'bg-amber-500' : isTracking ? 'bg-rose-500' : 'bg-slate-500'
+                }`}
+              />
+              <span className="font-medium text-[11px] linear-text-heading capitalize">
+                {isTracking ? (state === 'focused' ? 'Flow State' : state === 'distracted' ? 'Attention Drifting' : 'Fatigue Alert') : 'Telemetry Standby'}
+              </span>
+              {isTracking && (
+                <span className="text-[10px] font-mono text-emerald-400 font-semibold">{fps} FPS</span>
+              )}
+            </div>
+          </div>
+
+          {/* Sprint Duration & Timer */}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1 linear-inset p-1 rounded-lg text-xs">
+              {[15, 25, 45].map((m) => (
+                <button
+                  key={m}
+                  onClick={() => {
+                    setSprintMins(m);
+                    if (isTracking) {
+                      sprintEndRef.current = Date.now() + m * 60 * 1000;
+                      setTimeRemainingMs(m * 60 * 1000);
+                    } else {
+                      setTimeRemainingMs(m * 60 * 1000);
+                    }
+                    showToast(`Sprint set to ${m} minutes.`);
+                  }}
+                  className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-all ${
+                    sprintMins === m ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'linear-text-muted hover:text-white'
+                  }`}
+                >
+                  {m}m
+                </button>
+              ))}
+            </div>
+
+            <div className="font-mono text-lg font-bold linear-text-heading min-w-[55px] text-center">
+              {formatRemaining(timeRemainingMs)}
+            </div>
+          </div>
+
+          {/* Toolbar Actions */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {isTracking ? (
               <button
                 onClick={() => {
                   stopTracking();
-                  setCurrentScreen('landing');
+                  showToast('Camera paused.');
                 }}
-                className="flex items-center gap-2 group text-left"
-                title="Return to landing screen"
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg linear-btn-secondary text-xs font-semibold text-amber-400"
+                title="Pause camera stream (Space)"
               >
-                <div className="w-7 h-7 flex items-center justify-center">
-                  <svg viewBox="0 0 32 32" className="w-full h-full">
-                    <circle cx="16" cy="16" r="14" fill="none" stroke="#10B981" strokeWidth="2.5" />
-                    <circle cx="16" cy="16" r="8" fill="#10B981" opacity="0.25" />
-                    <circle cx="16" cy="16" r="3.5" fill="#10B981" />
-                  </svg>
-                </div>
-                <div>
-                  <span className="font-display font-bold text-sm linear-text-heading group-hover:text-emerald-400 transition-colors">
-                    FocusLens
-                  </span>
-                  <span className="block text-[10px] linear-text-muted">Live Workspace</span>
-                </div>
+                <Pause className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Pause</span>
               </button>
-
-              <div className="h-5 w-px bg-white/10 hidden sm:block" />
-
-              {/* Status Pill */}
-              <div className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-black/30 border border-white/5 text-xs">
-                <span
-                  className={`w-2 h-2 rounded-full ${
-                    state === 'focused' ? 'bg-emerald-500 animate-pulse' : state === 'distracted' ? 'bg-amber-500' : 'bg-rose-500'
-                  }`}
-                />
-                <span className="font-medium text-[11px] linear-text-heading capitalize">
-                  {state === 'focused' ? 'Flow State' : state === 'distracted' ? 'Attention Drifting' : 'Fatigue Alert'}
-                </span>
-                <span className="text-[10px] font-mono text-emerald-400 font-semibold">{fps} FPS</span>
-              </div>
-            </div>
-
-            {/* Sprint Timer Countdown & Duration Buttons */}
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1 linear-inset p-1 rounded-lg text-xs">
-                {[15, 25, 45].map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => {
-                      setSprintMins(m);
-                      sprintEndRef.current = Date.now() + m * 60 * 1000;
-                      setTimeRemainingMs(m * 60 * 1000);
-                      showToast(`Sprint set to ${m} minutes.`);
-                    }}
-                    className={`px-2 py-0.5 rounded text-[11px] font-semibold transition-all ${
-                      sprintMins === m ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'linear-text-muted'
-                    }`}
-                  >
-                    {m}m
-                  </button>
-                ))}
-              </div>
-
-              <div className="font-mono text-lg font-bold linear-text-heading min-w-[55px] text-center">
-                {formatRemaining(timeRemainingMs)}
-              </div>
-            </div>
-
-            {/* Compact Control Bar */}
-            <div className="flex items-center gap-1.5 flex-wrap">
+            ) : (
               <button
-                onClick={() => {
-                  recenter();
-                  if (soundFxEnabled) playChime('calibrate');
-                  showToast('Neutral posture calibrated.');
-                }}
-                className="p-2 rounded-lg linear-btn-secondary"
-                title="Recenter Baseline (Press R)"
+                onClick={handleStartSession}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-all shadow-sm"
+                title="Start camera tracking (Space)"
               >
-                <Compass className="w-4 h-4 text-cyan-400" />
+                <Play className="w-3.5 h-3.5 fill-current" />
+                <span>Start</span>
               </button>
+            )}
 
-              <button
-                onClick={() => setSoundFxEnabled(!soundFxEnabled)}
-                className="p-2 rounded-lg linear-btn-secondary"
-                title="Toggle focus alert chimes (Press M)"
-              >
-                {soundFxEnabled ? <Volume2 className="w-4 h-4 text-emerald-400" /> : <VolumeX className="w-4 h-4 opacity-50" />}
-              </button>
+            <button
+              onClick={() => {
+                recenter();
+                if (soundFxEnabled) playChime('calibrate');
+                showToast('Neutral posture calibrated.');
+              }}
+              className="p-2 rounded-lg linear-btn-secondary"
+              title="Recenter Baseline (Press R)"
+            >
+              <Compass className="w-4 h-4 text-cyan-400" />
+            </button>
 
-              <button
-                onClick={() => setHudEnabled(!hudEnabled)}
-                className={`p-2 rounded-lg border transition-colors ${
-                  hudEnabled ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400' : 'linear-btn-secondary'
-                }`}
-                title="Toggle AI HUD mesh (Press H)"
-              >
-                <Eye className="w-4 h-4" />
-              </button>
+            <button
+              onClick={() => setSoundFxEnabled(!soundFxEnabled)}
+              className="p-2 rounded-lg linear-btn-secondary"
+              title="Toggle audio alerts (Press M)"
+            >
+              {soundFxEnabled ? <Volume2 className="w-4 h-4 text-emerald-400" /> : <VolumeX className="w-4 h-4 opacity-50" />}
+            </button>
 
-              <button
-                onClick={toggleTheme}
-                className="p-2 rounded-lg linear-btn-secondary"
-                title="Toggle Theme (Press T)"
-              >
-                {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-700" />}
-              </button>
+            <button
+              onClick={() => setHudEnabled(!hudEnabled)}
+              className={`p-2 rounded-lg border transition-colors ${
+                hudEnabled ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400' : 'linear-btn-secondary'
+              }`}
+              title="Toggle AI HUD mesh (Press H)"
+            >
+              <Eye className="w-4 h-4" />
+            </button>
 
-              <button
-                onClick={() => setIsPrivacyOpen(true)}
-                className="p-2 rounded-lg linear-btn-secondary"
-                title="Privacy Architecture"
-              >
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              </button>
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-lg linear-btn-secondary"
+              title="Toggle Theme (Press T)"
+            >
+              {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-700" />}
+            </button>
 
-              {/* End Session Button */}
+            <button
+              onClick={() => setIsHistoryOpen(true)}
+              className="p-2 rounded-lg linear-btn-secondary"
+              title="View Past Sessions"
+            >
+              <History className="w-4 h-4 text-cyan-400" />
+            </button>
+
+            <button
+              onClick={() => setIsPrivacyOpen(true)}
+              className="p-2 rounded-lg linear-btn-secondary"
+              title="Privacy Architecture"
+            >
+              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            </button>
+
+            {/* End Session Button */}
+            {isTracking && (
               <button
                 onClick={handleEndSession}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-400 text-xs font-bold transition-all shadow-sm"
@@ -529,67 +550,45 @@ export function App() {
                 <span>End Session</span>
                 <kbd className="px-1 py-0.2 rounded bg-rose-500/20 text-[9px] font-mono">E</kbd>
               </button>
-            </div>
-          </header>
+            )}
+          </div>
+        </header>
 
-          {/* Clean 2-Column Live Workspace Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-            {/* Left Column: Hero Camera Stage with Posture Overlay */}
-            <div className="lg:col-span-7 flex flex-col gap-4">
-              <div className="linear-panel p-4 rounded-2xl shadow-xl border border-white/5">
-                <CameraStage
-                  videoRef={videoRef}
-                  hudCanvasRef={hudCanvasRef}
-                  state={state}
-                  isTracking={isTracking}
-                  onStartTracking={handleStartSession}
-                  fps={fps}
-                  isFaceTracked={biometrics.isFaceTracked}
-                  alignment={biometrics.alignment}
-                  pose={biometrics.pose}
-                />
-              </div>
-            </div>
-
-            {/* Right Column: Dominant Focus Score Dial + 3 Core Biometrics Cards */}
-            <div className="lg:col-span-5 flex flex-col gap-4">
-              <WhoopFocusDial
-                score={score}
+        {/* 2-Column Live Cockpit Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+          {/* Left Column: Hero Camera Stage with Posture Overlay */}
+          <div className="lg:col-span-7 flex flex-col gap-4">
+            <div className="linear-panel p-4 rounded-2xl shadow-xl border border-white/5">
+              <CameraStage
+                videoRef={videoRef}
+                hudCanvasRef={hudCanvasRef}
                 state={state}
                 isTracking={isTracking}
-                streakMs={currentStreakRef.current}
-                alignmentScore={currentAlignmentScore}
-                flowRatio={currentFlowRatio}
-              />
-
-              <CoreBiometricsStack
-                biometrics={biometrics}
-                state={state}
-                onRecenter={() => {
-                  recenter();
-                  if (soundFxEnabled) playChime('calibrate');
-                  showToast('Neutral posture calibrated.');
-                }}
+                onStartTracking={handleStartSession}
+                engineStatus={engineStatus}
+                engineError={engineError}
+                fps={fps}
+                isFaceTracked={biometrics.isFaceTracked}
+                alignment={biometrics.alignment}
+                pose={biometrics.pose}
               />
             </div>
           </div>
 
-          {/* Bottom Full-Width Section: Session Timeline & Collapsible Advanced Telemetry */}
-          <div className="flex flex-col gap-4 w-full">
-            <div className="linear-panel p-4 rounded-2xl border border-white/5 shadow-sm">
-              <TimelineChart
-                timeline={timeline}
-                elapsedMs={elapsedMs}
-                bestStreakMs={bestStreakMs}
-                maxDistractionMs={maxDistractionMs}
-                onExportCsv={handleExportCsv}
-                onExportJson={handleExportJson}
-              />
-            </div>
+          {/* Right Column: Dominant Whoop Focus Score Dial + Core Biometrics Stack */}
+          <div className="lg:col-span-5 flex flex-col gap-4">
+            <WhoopFocusDial
+              score={score}
+              state={state}
+              isTracking={isTracking}
+              streakMs={currentStreakRef.current}
+              alignmentScore={currentAlignmentScore}
+              flowRatio={currentFlowRatio}
+            />
 
-            {/* Collapsible Advanced Telemetry (Gaze Vector, Affect Sentiment, Euler Angles) */}
-            <AdvancedTelemetryDrawer
+            <CoreBiometricsStack
               biometrics={biometrics}
+              state={state}
               onRecenter={() => {
                 recenter();
                 if (soundFxEnabled) playChime('calibrate');
@@ -598,9 +597,32 @@ export function App() {
             />
           </div>
         </div>
-      )}
 
-      {/* STATE 3: SESSION SUMMARY MODAL / SCREEN */}
+        {/* Bottom Section: Timeline Chart & Collapsible Advanced Telemetry */}
+        <div className="flex flex-col gap-4 w-full">
+          <div className="linear-panel p-4 rounded-2xl border border-white/5 shadow-sm">
+            <TimelineChart
+              timeline={timeline}
+              elapsedMs={elapsedMs}
+              bestStreakMs={bestStreakMs}
+              maxDistractionMs={maxDistractionMs}
+              onExportCsv={handleExportCsv}
+              onExportJson={handleExportJson}
+            />
+          </div>
+
+          <AdvancedTelemetryDrawer
+            biometrics={biometrics}
+            onRecenter={() => {
+              recenter();
+              if (soundFxEnabled) playChime('calibrate');
+              showToast('Neutral posture calibrated.');
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Session Summary Modal */}
       <SessionSummaryModal
         isOpen={isSummaryOpen}
         onClose={() => setIsSummaryOpen(false)}
@@ -610,7 +632,7 @@ export function App() {
         onExportJson={handleExportJson}
       />
 
-      {/* Privacy Guarantee Modal */}
+      {/* Privacy Architecture Modal */}
       <PrivacyModal
         isOpen={isPrivacyOpen}
         onClose={() => setIsPrivacyOpen(false)}

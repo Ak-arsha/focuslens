@@ -16,7 +16,7 @@ const LEFT_EAR_TRAGUS = 234;
 const RIGHT_EAR_TRAGUS = 454;
 
 export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTick) {
-  // State Machine: 'idle' | 'requesting-permission' | 'loading-model' | 'calibrating' | 'tracking' | 'error'
+  // State Machine: 'idle' | 'requesting-permission' | 'loading-model' | 'tracking' | 'error'
   const [engineStatus, setEngineStatus] = useState('idle');
   const [engineError, setEngineError] = useState(null);
   const [isReady, setIsReady] = useState(false);
@@ -26,13 +26,14 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
   const landmarkerRef = useRef(null);
   const streamRef = useRef(null);
   const animFrameRef = useRef(null);
+  const isTrackingRef = useRef(false);
 
   // Calibration and smoothing refs
   const neutralBase = useRef({ yaw: 0, pitch: 0 });
   const smoothedPose = useRef({ yaw: 0, pitch: 0, roll: 0 });
   const smoothedSentiment = useRef({ valence: 50, smile: 0, stress: 0, focus: 80, strain: 0 });
 
-  // Biometrics State (Throttled to 8-10 Hz to prevent React render lag)
+  // Biometrics State (Throttled to 10 Hz to prevent React render lag)
   const [biometrics, setBiometrics] = useState({
     ear: 0,
     bpm: null,
@@ -45,8 +46,8 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
       yawDeviation: 0,
       pitchDeviation: 0,
       rollDeviation: 0,
-      status: 'Standby',
-      cue: 'Position face in frame to begin'
+      status: 'Optimal Posture',
+      cue: 'Aligned with screen center'
     },
     sentiment: {
       label: 'Calm Flow',
@@ -71,7 +72,7 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
   const lastStateTickTime = useRef(performance.now());
   const lastUIUpdateTime = useRef(performance.now());
 
-  // Initialize MediaPipe FaceLandmarker with WebGL / WASM fallback
+  // Initialize MediaPipe FaceLandmarker with GPU / CPU delegate fallback
   useEffect(() => {
     let active = true;
 
@@ -99,7 +100,7 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
       } catch (err) {
         console.error('Failed to initialize FaceLandmarker:', err);
         if (active) {
-          setEngineError('Failed to load on-device vision model. Check your internet connection for initial model load.');
+          setEngineError('Failed to load on-device vision model.');
         }
       }
     }
@@ -173,7 +174,7 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
         ctx.stroke();
       }
 
-      // 3. Ergonomic Center Reticle at Nose Tip
+      // 3. Center Reticle at Nose Tip
       if (landmarks[NOSE_TIP]) {
         const nose = pt(NOSE_TIP);
 
@@ -198,7 +199,7 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
         ctx.lineTo(nose.x, nose.y + 22);
         ctx.stroke();
 
-        // Directional correction ray when posture is deviated
+        // Directional alignment ray if deviated
         if (!isAligned) {
           const arrowX = nose.x - (yawDev * 2.2);
           const arrowY = nose.y + (pitchDev * 2.2);
@@ -239,15 +240,14 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
     return (dVertical1 + dVertical2) / (2.0 * dHorizontal);
   };
 
-  // Main High-Frequency Detection Loop
+  // High-Frequency Detection Loop
   const loop = useCallback(() => {
-    if (!videoRef.current || !landmarkerRef.current) return;
+    if (!isTrackingRef.current || !videoRef.current || !landmarkerRef.current) return;
 
     const now = performance.now();
     const dt = now - prevTick.current;
     prevTick.current = now;
 
-    // FPS calculation
     framesCount.current++;
     if (now - lastFpsTime.current >= 1000) {
       setFps(framesCount.current);
@@ -271,7 +271,7 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
 
     const faceLandmarks = detection.faceLandmarks?.[0];
 
-    // No face in frame handling
+    // No face in frame
     if (!faceLandmarks) {
       noFaceDuration.current += dt;
       drawHud(null, false, 0, 0);
@@ -281,7 +281,6 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
         onStateTick('idle', dt, 0);
       }
 
-      // Throttle UI update to 10 Hz
       if (now - lastUIUpdateTime.current >= 100) {
         lastUIUpdateTime.current = now;
         setBiometrics((prev) => ({
@@ -303,7 +302,7 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
 
     noFaceDuration.current = 0;
 
-    // 1. EAR (Eye Aspect Ratio)
+    // 1. Eye Aspect Ratio
     const leftEar = computeEar(LEFT_EYE, faceLandmarks);
     const rightEar = computeEar(RIGHT_EYE, faceLandmarks);
     const ear = (leftEar + rightEar) / 2;
@@ -316,7 +315,7 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
       }
     }
 
-    // 3. Iris / Gaze directional vector
+    // 3. Gaze Vector
     const gazeX = ((blendshapes.eyeLookInLeft || 0) - (blendshapes.eyeLookOutLeft || 0) +
                    (blendshapes.eyeLookOutRight || 0) - (blendshapes.eyeLookInRight || 0)) / 2;
     const gazeY = ((blendshapes.eyeLookUpLeft || 0) + (blendshapes.eyeLookUpRight || 0) -
@@ -331,7 +330,7 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
       dir = gazeY > 0 ? 'Up' : 'Down';
     }
 
-    // 4. 3D Head Pose orientation via transformation matrix
+    // 4. 3D Head Orientation via 4x4 matrix with EMA filter
     const matrix = detection.facialTransformationMatrixes?.[0]?.data;
     if (matrix) {
       const rawPose = {
@@ -339,7 +338,6 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
         pitch: Math.atan2(-matrix[9], Math.hypot(matrix[8], matrix[10])) * 57.2958,
         roll: Math.atan2(matrix[1], matrix[5]) * 57.2958,
       };
-      // Exponential Moving Average smoothing
       smoothedPose.current.yaw += (rawPose.yaw - smoothedPose.current.yaw) * 0.35;
       smoothedPose.current.pitch += (rawPose.pitch - smoothedPose.current.pitch) * 0.35;
       smoothedPose.current.roll += (rawPose.roll - smoothedPose.current.roll) * 0.35;
@@ -349,7 +347,6 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
     const currentPitch = smoothedPose.current.pitch - neutralBase.current.pitch;
     const currentRoll = smoothedPose.current.roll;
 
-    // Posture Alignment evaluation
     const isPostureAligned = Math.abs(currentYaw) <= 14 && Math.abs(currentPitch) <= 12 && Math.abs(currentRoll) <= 10;
     let postureCue = 'Aligned with workspace center';
     let postureStatus = 'Optimal Posture';
@@ -361,7 +358,7 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
         postureCue = 'Turn head slightly right';
         postureStatus = 'Turned Left';
       } else if (currentPitch > 12) {
-        postureCue = 'Lift chin upward to relieve neck tension';
+        postureCue = 'Lift chin upward to relieve neck strain';
         postureStatus = 'Slouching Down';
       } else if (currentPitch < -12) {
         postureCue = 'Lower chin toward screen horizon';
@@ -372,7 +369,7 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
       }
     }
 
-    // Draw HUD guidelines at full frame rate
+    // Draw HUD at 60 FPS
     drawHud(faceLandmarks, isPostureAligned, currentYaw, currentPitch);
 
     // 5. Blink and Eye Closure Tracking
@@ -389,7 +386,7 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
     }
     blinkTimestamps.current = blinkTimestamps.current.filter((t) => now - t < 60000);
 
-    // 6. Yawn Detection via Jaw blendshape
+    // 6. Yawn Detection
     const jawOpen = blendshapes.jawOpen || 0;
     if (jawOpen > 0.55) {
       yawnDuration.current += dt;
@@ -402,7 +399,7 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
       yawnFlag.current = false;
     }
 
-    // 7. Sentiment & Affect Telemetry
+    // 7. Affective Facial Sentiment Analysis
     const rawSmile = ((blendshapes.mouthSmileLeft || 0) + (blendshapes.mouthSmileRight || 0)) / 2;
     const rawBrowDown = ((blendshapes.browDownLeft || 0) + (blendshapes.browDownRight || 0)) / 2;
     const rawSquint = ((blendshapes.eyeSquintLeft || 0) + (blendshapes.eyeSquintRight || 0)) / 2;
@@ -417,12 +414,12 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
     const curStrain = smoothedSentiment.current.strain;
 
     let sentimentLabel = 'Calm Flow';
-    let sentimentDescription = 'Neutral facial muscle tone, steady breathing & flow state';
+    let sentimentDescription = 'Neutral facial muscle tone in steady flow state';
     let valenceScore = 55;
 
     if (curSmile > 0.3) {
       sentimentLabel = 'Positive & Engaged';
-      sentimentDescription = 'Active satisfaction and positive engagement';
+      sentimentDescription = 'Active satisfaction and positive emotional valence';
       valenceScore = Math.min(100, Math.round(50 + curSmile * 100));
     } else if (curStress > 0.45) {
       sentimentLabel = 'Cognitive Strain';
@@ -434,7 +431,7 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
       valenceScore = Math.max(-60, Math.round(30 - curStrain * 90));
     } else if (curStress > 0.25) {
       sentimentLabel = 'Deep Problem Solving';
-      sentimentDescription = 'Analytical concentration with mild furrow';
+      sentimentDescription = 'Analytical concentration with mild brow furrow';
       valenceScore = 40;
     }
 
@@ -450,8 +447,7 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
       onStateTick(calculatedState, dt, Number(ear.toFixed(2)));
     }
 
-    // THROTTLE React state updates to ~10 Hz (every 100ms)
-    // This maintains 30-60 FPS camera inference without bogging down the React render cycle
+    // THROTTLE React state updates to 10 Hz
     if (now - lastUIUpdateTime.current >= 100) {
       lastUIUpdateTime.current = now;
       const bpmVal = Math.round((blinkTimestamps.current.length * 60000) / 60000);
@@ -495,14 +491,14 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
     animFrameRef.current = requestAnimationFrame(loop);
   }, [videoRef, drawHud, onStateTick]);
 
-  // Start with explicit state machine transitions
+  // Start tracking
   const start = useCallback(async () => {
     setEngineError(null);
     setEngineStatus('requesting-permission');
 
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error('Webcam API is not supported in this browser. Use Chrome, Edge, Safari, or Firefox.');
+        throw new Error('Webcam API is not supported in this browser. Please use Chrome, Edge, Safari, or Firefox.');
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -513,29 +509,29 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+        try {
+          await videoRef.current.play();
+        } catch (playErr) {
+          console.warn('Video play warning:', playErr);
+        }
       }
 
       // Check model readiness
       if (!landmarkerRef.current) {
         setEngineStatus('loading-model');
         let waited = 0;
-        while (!landmarkerRef.current && waited < 10000) {
+        while (!landmarkerRef.current && waited < 12000) {
           await new Promise((r) => setTimeout(r, 100));
           waited += 100;
         }
-        if (!landmarkerRef.current) {
-          throw new Error('On-device vision model loading timed out. Please check network connection and reload.');
-        }
       }
 
-      setEngineStatus('calibrating');
-      await new Promise((r) => setTimeout(r, 400));
-
+      isTrackingRef.current = true;
       setIsTracking(true);
       setEngineStatus('tracking');
       prevTick.current = performance.now();
       loop();
+      return true;
     } catch (err) {
       console.error('Camera or initialization error:', err);
       let errorMsg = 'Failed to access camera.';
@@ -549,13 +545,17 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
       setEngineError(errorMsg);
       setEngineStatus('error');
       setIsTracking(false);
+      isTrackingRef.current = false;
       throw err;
     }
   }, [videoRef, loop]);
 
   const stop = useCallback(() => {
+    isTrackingRef.current = false;
+    setIsTracking(false);
     if (animFrameRef.current) {
       cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
     }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
@@ -564,7 +564,6 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
-    setIsTracking(false);
     setEngineStatus('idle');
   }, [videoRef]);
 
