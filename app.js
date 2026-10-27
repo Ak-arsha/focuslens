@@ -271,7 +271,7 @@ function createNewSession() {
    Start Camera & MediaPipe Initialization
    ========================================================================== */
 async function startTracking() {
-  $("statusText").textContent = "Loading AI Vision…";
+  $("statusText").textContent = "Loading AI Vision...";
   $("camBtn").disabled = true;
 
   try {
@@ -483,9 +483,9 @@ function trackingLoop() {
     }
 
     // 3D Head Pose Sliders
-    $("yawVal").textContent = Math.round(currentYaw) + "°";
-    $("pitchVal").textContent = Math.round(currentPitch) + "°";
-    $("rollVal").textContent = Math.round(smoothedPose.roll) + "°";
+    $("yawVal").textContent = `${Math.round(currentYaw)}\u00B0`;
+    $("pitchVal").textContent = `${Math.round(currentPitch)}\u00B0`;
+    $("rollVal").textContent = `${Math.round(smoothedPose.roll)}\u00B0`;
 
     $("yawPip").style.left = (50 + Math.max(-1, Math.min(1, currentYaw / 40)) * 50) + "%";
     $("pitchPip").style.left = (50 + Math.max(-1, Math.min(1, currentPitch / 40)) * 50) + "%";
@@ -873,8 +873,8 @@ function renderHistoryList() {
     return `
       <li class="history-item-row">
         <span class="h-date">${dateFormatted}</span>
-        <span class="h-dur">⏱️ ${formatTime(item.duration)}</span>
-        <span class="h-flow">🔥 ${item.flowPct}% flow</span>
+        <span class="h-dur">${formatTime(item.duration)}</span>
+        <span class="h-flow">${item.flowPct}% flow</span>
         <span class="h-score">Score: ${item.avgScore}</span>
         <span class="h-badge">${grade}</span>
       </li>
@@ -998,13 +998,13 @@ function copyShareText() {
   const avg = Math.round(session.scoreSum / Math.max(session.scoreCount, 1));
   const flowPct = Math.round((session.timeInState.focused / Math.max(elapsed, 1)) * 100);
 
-  const text = `🎯 FocusLens AI Telemetry Summary
-────────────────────────────
-⏱️ Duration: ${formatTime(elapsed)}
-🏆 Mean Focus Score: ${avg}/100
-🔥 Flow State: ${flowPct}%
-⚡ Best Streak: ${formatTime(session.bestStreak)}
-🔒 100% Client-Side Privacy • https://focuslens.vercel.app`;
+  const text = `FocusLens AI Telemetry Summary
+------------------------------------
+Duration: ${formatTime(elapsed)}
+Mean Focus Score: ${avg}/100
+Flow State: ${flowPct}%
+Best Streak: ${formatTime(session.bestStreak)}
+Privacy: 100% Client-Side Processing • https://focuslens.vercel.app`;
 
   navigator.clipboard.writeText(text).then(() => {
     showToast("Summary copied to clipboard!");

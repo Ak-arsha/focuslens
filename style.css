@@ -1113,7 +1113,21 @@ body:not([data-state="idle"]) .viewport-idle-overlay {
 }
 
 .sound-icon {
-  font-size: 1.4rem;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-sub);
+}
+.sound-card.active .sound-icon {
+  color: var(--color-flow);
+}
+.sound-svg {
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
 }
 .sound-meta {
   display: flex;
