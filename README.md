@@ -8,11 +8,11 @@
 
 ## Overview
 
-FocusLens is a client-side computer vision application designed to help knowledge workers, developers, and students sustain high-quality attention while protecting their physical wellness.
+FocusLens is an intelligent, client-side attention studio built with React, JavaScript, Three.js, and Google MediaPipe. It helps software engineers, researchers, and remote knowledge workers sustain cognitive flow while proactively safeguarding visual and musculoskeletal health.
 
 Prolonged computer sessions often lead to unconscious attention drift, digital eye strain (asthenopia) caused by drastically reduced blink rates, and neck/back fatigue from poor ergonomics. Traditional computer vision tools attempt to address this by streaming webcam footage to cloud servers, introducing severe privacy and latency concerns.
 
-FocusLens eliminates this compromise. Powered by Google MediaPipe Tasks Vision running locally via WebAssembly and WebGL, FocusLens processes every video frame in temporary browser memory. Video feeds, audio, and biometric metrics never leave your machine.
+FocusLens eliminates this compromise. Powered by Google MediaPipe Tasks Vision running locally via WebAssembly and WebGL, FocusLens processes every video frame in temporary browser memory. Video feeds, audio, and biometric metrics never leave your machine. A real-time Three.js 3D Holographic Head Wireframe mirrors your head pose orientation in real-time, giving you instantaneous ergonomic awareness.
 
 ---
 
@@ -26,6 +26,7 @@ FocusLens eliminates this compromise. Powered by Google MediaPipe Tasks Vision r
 
 ### Objectives
 - Compute real-time biometric indicators (Eye Aspect Ratio, blink rate, 3D head pose, gaze vectors) purely on-device at 30 to 60 FPS.
+- Render an interactive 3D WebGL Holographic head visualizer synchronized to real-time pitch, yaw, and roll telemetry.
 - Provide objective, adaptive focus scoring (0 to 100) with non-intrusive feedback.
 - Detect digital eye strain and drowsiness in real time using peer-reviewed facial landmark algorithms.
 - Structure productivity into customizable focus sprints with guided 4-7-8 box breathing recovery breaks.
@@ -35,6 +36,7 @@ FocusLens eliminates this compromise. Powered by Google MediaPipe Tasks Vision r
 
 ## Key Features
 
+- **Interactive Three.js 3D Head Hologram**: Real-time WebGL cybernetic wireframe avatar that mirrors your yaw, pitch, and roll in real-time with state-reactive coloration.
 - **Dual Viewport Interface**: Toggle between Widescreen Studio View (with live AI mesh overlay and corner reticles) and Minimalist Circular Lens View.
 - **Eye Dynamics and Blink Rate Telemetry**: Continuous measurement of Eye Aspect Ratio (EAR) and 60-second sliding-window Blinks Per Minute (BPM) with digital eye-strain warnings.
 - **3D Head Pose Tracking**: Real-time calculation of Yaw (horizontal turn), Pitch (vertical tilt), and Roll (lateral lean) with one-click neutral baseline recalibration.
@@ -52,11 +54,13 @@ FocusLens eliminates this compromise. Powered by Google MediaPipe Tasks Vision r
 ## Tech Stack and Architecture
 
 ### Technology Stack
-- **Languages**: HTML5, CSS3, JavaScript (ES6+ Modules)
+- **Frontend Framework**: React 18 (JavaScript / JSX)
+- **3D Graphics & Rendering**: Three.js (WebGL icosahedron procedural head geometry)
+- **Styling & UI**: Tailwind CSS, Lucide React icons
 - **Computer Vision Model**: Google MediaPipe Face Landmarker (v0.10.14)
 - **Runtime Acceleration**: WebAssembly (WASM), WebGL, WebGPU
 - **Audio Synthesis**: Native Web Audio API (OscillatorNode, BiquadFilterNode, StereoPannerNode, AudioBufferSourceNode)
-- **Graphics & Visualization**: HTML5 Canvas API (High-DPI 2D Context)
+- **Build Tool**: Vite 5
 - **Storage**: Client-Side HTML5 LocalStorage
 - **Deployment & Hosting**: Vercel (Edge Network with Custom Permissions-Policy headers)
 
@@ -72,12 +76,13 @@ The following diagram illustrates the end-to-end FocusLens pipeline, from webcam
 
 The application interface is divided into functional operational zones:
 
-1. **Top Navigation**: Live connection status pill, real-time AI HUD toggle, sound effects toggle, neutral pose calibration, privacy documentation, and dark/light mode toggle.
-2. **Camera Studio Stage**: Webcam viewport supporting Studio and Lens modes, FPS and face detection indicators, sprint countdown clock, duration chips (15m, 25m, 45m, 60m), and session controls.
-3. **Biometrics Command Center**: Central 0 to 100 focus score dial, dynamic state headline, and four metric cards: Eye Dynamics, Gaze Vector, Fatigue Radar, and 3D Head Pose sliders.
-4. **Ambient Soundscape Deck**: Procedural sound selector with volume control and live percentage readouts.
-5. **Interactive Telemetry Timeline**: Second-by-second focus score graph with hover scrubbers and KPI stat boxes (Session Duration, Longest Flow Streak, Longest Distraction, Mean Score).
-6. **Historical Archive**: Local session logs showing date, duration, flow percentage, average score, and letter grade ratings.
+1. **Top Navigation**: Live connection status pill, real-time AI HUD toggle, sound effects toggle, neutral pose calibration, privacy documentation, theme toggle, and GitHub repository link.
+2. **Camera Studio Stage**: Webcam viewport supporting Studio and Lens modes, FPS and face detection indicators, circular progress dial, sprint countdown clock, and session controls.
+3. **Biometrics Command Center**: Central 0 to 100 focus score dial, dynamic state headline, and metric cards for Eye Dynamics, Gaze Vector, Fatigue Radar, and 3D Orientation Gauges.
+4. **Three.js 3D Posture Hologram**: Low-poly cybernetic mesh rendering in real-time WebGL with smooth slerp interpolation matching the user's facial transformation matrix.
+5. **Ambient Soundscape Deck**: Procedural sound selector (40Hz Binaural Beats, Calm Rain, Deep Brown Noise) with volume slider.
+6. **Interactive Telemetry Timeline**: Second-by-second focus score graph with hover scrubbers and KPI stat boxes (Session Duration, Longest Flow Streak, Longest Distraction, Mean Score).
+7. **Historical Archive**: Local session logs showing date, duration, flow percentage, average score, and letter grade ratings.
 
 Live URL: [https://focuslens-lilac.vercel.app](https://focuslens-lilac.vercel.app)
 
@@ -89,14 +94,34 @@ Live URL: [https://focuslens-lilac.vercel.app](https://focuslens-lilac.vercel.ap
 focuslens/
 ├── docs/
 │   └── images/
-│       └── architecture.png
-├── .gitignore          # Git exclusion rules (build artifacts, .vercel)
-├── LICENSE             # MIT Open Source License
-├── README.md           # Comprehensive project documentation
-├── app.js              # Application logic, MediaPipe loop, Web Audio, charting
-├── index.html          # Semantic HTML5 application structure and accessible dialogs
-├── style.css           # Modern CSS design system, typography, animations, responsive rules
-└── vercel.json         # Vercel deployment configuration, clean URLs, Permissions-Policy
+│       └── architecture.png   # End-to-end system architecture diagram
+├── src/
+│   ├── components/
+│   │   ├── AmbientSoundDeck.jsx    # Procedural Web Audio ambient soundscapes
+│   │   ├── BiometricsGrid.jsx      # Telemetry cards & head pose gauges
+│   │   ├── CameraStage.jsx         # Web camera viewport & AI canvas HUD
+│   │   ├── GuidedBreakModal.jsx    # 4-7-8 breathing circle & 20-20-20 rule
+│   │   ├── HistoryArchive.jsx      # Local storage session records
+│   │   ├── Navbar.jsx              # Status toolbar & navigation actions
+│   │   ├── PrivacyModal.jsx        # 100% on-device privacy guarantee
+│   │   ├── ShareModal.jsx          # Clipboard summary card generator
+│   │   ├── SprintController.jsx    # Pomodoro sprint timer controls
+│   │   ├── ThreeHeadVisualizer.jsx # Three.js WebGL 3D head hologram
+│   │   └── TimelineChart.jsx       # High-DPI canvas telemetry chart
+│   ├── hooks/
+│   │   └── useFaceLandmarker.js    # MediaPipe WebAssembly inference loop
+│   ├── utils/
+│   │   └── audio.js                # Web Audio API synthesizers & chimes
+│   ├── App.jsx                     # Root application state coordinator
+│   ├── index.css                   # Tailwind directives & design tokens
+│   └── main.jsx                    # Application entry point
+├── index.html                      # HTML5 root shell
+├── package.json                    # Dependencies and build scripts
+├── postcss.config.js               # PostCSS Tailwind plugins
+├── tailwind.config.js              # Tailwind theme configuration
+├── vercel.json                     # SPA rewrites & security headers
+├── vite.config.js                  # Vite bundler configuration
+└── README.md                       # Comprehensive documentation
 ```
 
 ---
@@ -104,9 +129,9 @@ focuslens/
 ## Installation and Setup
 
 ### Prerequisites
-- A modern web browser supporting WebGL (Google Chrome, Microsoft Edge, Brave, Mozilla Firefox, or Apple Safari).
-- A functional webcam.
-- A local HTTP server (camera access via `getUserMedia` requires a secure origin: `localhost` or `https://`).
+- Node.js (v18 or higher recommended) and npm
+- A modern web browser supporting WebGL (Google Chrome, Microsoft Edge, Brave, Mozilla Firefox, or Apple Safari)
+- A functional webcam
 
 ### Cloning the Repository
 ```bash
@@ -114,30 +139,35 @@ git clone https://github.com/Ak-arsha/focuslens.git
 cd focuslens
 ```
 
-### Running Locally
-
-Because FocusLens is a zero-build static application, you can start it immediately using any lightweight static server:
-
-#### Option A: Using Python (Recommended)
+### Installation
+Install project dependencies:
 ```bash
-python -m http.server 3000
-```
-Open your browser and visit: `http://localhost:3000`
-
-#### Option B: Using Node.js (via npx serve)
-```bash
-npx serve .
+npm install
 ```
 
-#### Option C: Using VS Code Live Server
-Right-click `index.html` inside VS Code and select **Open with Live Server**.
+### Running Locally in Development Mode
+Start the Vite development server:
+```bash
+npm run dev
+```
+Open your browser and navigate to: `http://localhost:3000`
+
+### Building for Production
+Compile the optimized production bundle:
+```bash
+npm run build
+```
+Preview the production build locally:
+```bash
+npm run preview
+```
 
 ---
 
 ## Usage and Workflow
 
 1. **Activate the Camera**: Click **Start Camera Session**. Grant the browser permission to access your webcam when prompted.
-2. **Calibrate Neutral Baseline**: Sit in your normal working posture approximately 50 to 70 cm from the monitor, look at the center of your screen, and click **Recenter** (or the **Calibrate** button in the header).
+2. **Calibrate Neutral Baseline**: Sit in your normal working posture approximately 50 to 70 cm from the monitor, look at the center of your screen, and click **Recenter**.
 3. **Set Sprint Duration**: Select your preferred sprint length (15m, 25m, 45m, or 60m) using the chips in the sprint controller.
 4. **Select Ambient Soundscape (Optional)**: Choose an ambient background mode (40Hz Binaural Flow, Calm Rain, or Deep Brown Noise) and adjust the volume slider.
 5. **Work in Flow**: FocusLens continuously measures your engagement. If your head turns away or eyes close for prolonged periods, a gentle notification chime sounds.
@@ -186,7 +216,7 @@ $$S_{t} = S_{t-1} + (T - S_{t-1}) \times \min\left(1, \frac{\Delta t}{1500}\righ
 
 ### Security and Privacy Protections
 - **Zero Cloud Transmission**: All inference is executed locally through compiled WebAssembly binary modules.
-- **Permissions-Policy Configuration**: The deployment includes strict security headers:
+- **Permissions-Policy Configuration**: The deployment includes strict security headers configured in `vercel.json`:
   ```json
   { "key": "Permissions-Policy", "value": "camera=(self)" },
   { "key": "X-Content-Type-Options", "value": "nosniff" },
