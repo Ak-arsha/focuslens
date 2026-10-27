@@ -32,24 +32,54 @@ The following diagram illustrates the end-to-end FocusLens pipeline, from webcam
 
 ![FocusLens System Architecture](docs/images/architecture.png)
 
-```
-Webcam Video (640x480 @ 60 FPS)
-   │
-   ▼
-MediaPipe Face Landmarker (WASM / WebGL Engine)
-   │
-   ├── 478 3D Facial Landmarks ─────────► Eye Aspect Ratio (EAR) & Blink Rate (BPM)
-   ├── 52 Blendshape Coefficients ──────► Iris Gaze Vector & Affect Tension
-   └── 4x4 Facial Transform Matrix ─────► 3D Head Pose (Yaw, Pitch, Roll) with EMA
-                                                  │
-                                                  ▼
-                                      Adaptive Flow Scoring Engine (0-100)
-                                                  │
-                                                  ▼
-                ┌─────────────────────────────────┴─────────────────────────────────┐
-                ▼                                                                   ▼
-    60 FPS Canvas Posture Overlay & HUD                           10 Hz Throttled React Telemetry
-(Plumb Axis, Horizon Guideline, Reticle)                    (Focus Dial, Blink Radar, IndexedDB Storage)
+### End-to-End On-Device Pipeline
+
+```mermaid
+flowchart TD
+    subgraph Input ["Client-Side Video Stream"]
+        Cam["Webcam Video Feed<br>(640x480 @ 30-60 FPS)"]
+    end
+
+    subgraph Inference ["On-Device Computer Vision Engine"]
+        WASM["MediaPipe Face Landmarker<br>(WASM + WebGL Acceleration)"]
+        Mesh["478 3D Facial Landmarks"]
+        Blend["52 Facial Blendshapes"]
+        Matrix["4x4 Facial Transform Matrix"]
+    end
+
+    subgraph Biometrics ["Real-Time Feature Extraction"]
+        EAR["Eye Aspect Ratio (EAR)<br>& Blink Rate (BPM)"]
+        Gaze["Iris Gaze Vectors<br>& Facial Affect Valence"]
+        Pose["3D Head Pose (Yaw, Pitch, Roll)<br>with EMA Smoothing (&alpha; = 0.35)"]
+    end
+
+    subgraph Scoring ["Cognitive Flow Engine"]
+        Engine["Adaptive Flow Scoring Engine (0-100)<br>Exponential Score Convergence"]
+    end
+
+    subgraph Output ["Decoupled Presentation & Persistence"]
+        Canvas["60 FPS HTML5 Canvas HUD<br>(Plumb Axis, Horizon, Nose Reticle)"]
+        ReactUI["10 Hz Throttled React Telemetry<br>(Whoop Focus Dial & Health Cards)"]
+        Storage["Client-Side IndexedDB Storage<br>(focuslens_db & CSV/JSON Export)"]
+    end
+
+    Cam --> WASM
+    WASM --> Mesh
+    WASM --> Blend
+    WASM --> Matrix
+
+    Mesh --> EAR
+    Blend --> Gaze
+    Matrix --> Pose
+
+    EAR --> Engine
+    Gaze --> Engine
+    Pose --> Engine
+
+    Mesh -.-> Canvas
+    Pose -.-> Canvas
+    Engine --> ReactUI
+    Engine --> Storage
 ```
 
 ---
@@ -72,14 +102,55 @@ MediaPipe Face Landmarker (WASM / WebGL Engine)
 
 ## Key Engineering Decisions
 
-1. **On-Device WASM Inference over Cloud Streaming**: Running MediaPipe Face Landmarker locally guarantees zero cloud data transmission, eliminates network bandwidth overhead, and achieves ultra-low frame processing latency ($< 30\text{ ms}$).
-2. **10 Hz UI Update Throttling with 60 FPS Canvas Rendering**: Decoupled the high-frequency computer-vision loop (30–60 FPS) from the React component tree. Heavy landmark drawing occurs directly on an HTML5 2D canvas at native refresh rate, while React state updates are throttled to 10 Hz, slashing CPU consumption by over 60%.
-3. **Exponential Moving Average (EMA) Pose Smoothing**: Raw head transformation matrices exhibit high-frequency jitter. An exponential moving average filter with $\alpha = 0.35$ dampens sensor noise while preserving instantaneous response to real head turns.
-4. **Three-State Product Architecture**: Replaced overwhelming multi-gauge dashboards with a structured three-state flow:
-   - **Landing & Permission Screen**: Benefit overview and explicit camera permission state machine (`idle` → `requesting-permission` → `loading-model` → `calibrating` → `tracking`).
-   - **Live Focus Workspace**: Two-column layout prioritizing the hero camera posture stage and dominant Whoop-style Focus Dial, with advanced telemetry tucked into a collapsible drawer.
-   - **Session Summary Report**: Health-app post-session report with grade, physiological insights, trend visualization, and one-click data export.
-5. **Client-Side IndexedDB Storage**: Retains session history locally in IndexedDB without external databases, supporting schema indexing, raw CSV export, and full JSON backup.
+### 1. On-Device WASM Inference over Cloud Streaming
+Running MediaPipe Face Landmarker locally guarantees zero cloud data transmission, eliminates network bandwidth overhead, and achieves ultra-low frame processing latency ($< 30\text{ ms}$).
+
+### 2. 10 Hz UI Update Throttling with 60 FPS Native Canvas Rendering
+Decoupled the high-frequency computer-vision loop (30–60 FPS) from the React component tree. Heavy landmark drawing occurs directly on an HTML5 2D canvas at native refresh rate, while React state updates are throttled to 10 Hz, slashing CPU consumption by over 60%.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as User / Webcam
+    participant MP as MediaPipe (WASM/WebGL)
+    participant Calc as Biometric Engine
+    participant Canvas as HTML5 Canvas (60 FPS)
+    participant React as React State (10 Hz Throttled)
+    participant DB as IndexedDB (focuslens_db)
+
+    User->>MP: Video Frame (dt ~ 16ms)
+    activate MP
+    MP->>Calc: 478 Landmarks + Blendshapes + 4x4 Matrix
+    deactivate MP
+    activate Calc
+    Calc->>Calc: Compute EAR, Gaze Vector, Pose EMA, & Flow Score
+    Calc->>Canvas: Direct 2D Render (Plumb Line, Horizon, Reticle)
+    Note over Canvas: Native Refresh Rate (~60 FPS)
+    
+    alt UI Throttle Timer Elapsed (dt >= 100ms)
+        Calc->>React: Dispatch Telemetry Tick (10 Hz)
+        React->>React: Update Whoop Dial, Blink Rate & Posture Card
+    end
+    deactivate Calc
+
+    opt Session Concluded [Key E]
+        React->>DB: Persist Session Record & Biometric Timeline
+        DB-->>React: Session Stored Locally
+        React->>User: Display Health Report (Grade, Trends, CSV/JSON)
+    end
+```
+
+### 3. Exponential Moving Average (EMA) Pose Smoothing
+Raw head transformation matrices exhibit high-frequency jitter. An exponential moving average filter with $\alpha = 0.35$ dampens sensor noise while preserving instantaneous response to real head turns.
+
+### 4. Three-State Product Architecture
+Replaced overwhelming multi-gauge dashboards with a structured three-state flow:
+- **Landing & Permission Screen**: Benefit overview and explicit camera permission state machine (`idle` → `requesting-permission` → `loading-model` → `calibrating` → `tracking`).
+- **Live Focus Workspace**: Two-column layout prioritizing the hero camera posture stage and dominant Whoop-style Focus Dial, with advanced telemetry tucked into a collapsible drawer.
+- **Session Summary Report**: Health-app post-session report with grade, physiological insights, trend visualization, and one-click data export.
+
+### 5. Client-Side IndexedDB Storage
+Retains session history locally in IndexedDB without external databases, supporting schema indexing, raw CSV export, and full JSON backup.
 
 ---
 
@@ -99,6 +170,52 @@ MediaPipe Face Landmarker (WASM / WebGL Engine)
 ---
 
 ## Product Workflow
+
+```mermaid
+flowchart LR
+    subgraph Screen1 ["1. Landing & Onboarding"]
+        L1["Landing Screen"]
+        L2["Benefit Cards & Privacy Guarantee"]
+        CTA["Start Focus Session CTA"]
+    end
+
+    subgraph StateMachine ["Hardware & Model Initialization"]
+        S_Req["Requesting Camera Permission"]
+        S_Mod["Loading MediaPipe WASM Model"]
+        S_Cal["Calibrating Neutral Baseline"]
+        S_Err["Permission / Device Error"]
+    end
+
+    subgraph Screen2 ["2. Live Focus Workspace"]
+        W_Cam["Hero Camera Stage<br>with Posture Alignment HUD"]
+        W_Dial["Whoop Focus Dial (0-100)<br>& Unbroken Streak Timer"]
+        W_Bio["Core Biometrics Stack<br>(Blink Rate, Posture, Fatigue)"]
+        W_Draw["Collapsible Advanced Drawer<br>(Gaze Matrix, Valence, Euler)"]
+    end
+
+    subgraph Screen3 ["3. Session Summary Report"]
+        R_Grade["Recovery Grade (S/A/B/C)<br>& Insight Breakdown"]
+        R_Stats["4-Stat Telemetry Grid<br>& Trend Visualization"]
+        R_Exp["Export CSV / JSON<br>& Start New Sprint"]
+    end
+
+    L1 --> L2 --> CTA
+    CTA --> S_Req
+    S_Req -->|Allowed| S_Mod
+    S_Req -->|Denied| S_Err
+    S_Err -->|Retry| S_Req
+    S_Mod --> S_Cal
+    S_Cal --> W_Cam
+
+    W_Cam --- W_Dial
+    W_Dial --- W_Bio
+    W_Bio --- W_Draw
+
+    W_Cam -->|"End Session [E]"| R_Grade
+    R_Grade --- R_Stats
+    R_Stats --- R_Exp
+    R_Exp -->|"Start New Sprint"| W_Cam
+```
 
 ### 1. Landing & Permission Screen
 Clean onboarding displaying the core product value proposition, three benefit cards (Focus Telemetry, Posture Awareness, Eye-Strain Prevention), zero-cloud privacy guarantee, and single "Start Focus Session" action.
