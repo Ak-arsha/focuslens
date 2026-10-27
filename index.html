@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FocusLens — AI Webcam Focus & Attention Tracker</title>
+  <meta name="description" content="Private, on-device AI focus tracker powered by MediaPipe. Real-time eye openness, gaze, 3D head pose, drowsiness detection, and Pomodoro sprints. 100% in-browser, no video leaves your device.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%230B0F14' stroke='%2310B981' stroke-width='2.5'/%3E%3Ccircle cx='16' cy='16' r='7' fill='%2310B981'/%3E%3Ccircle cx='19' cy='13' r='2' fill='%23FFFFFF'/%3E%3C/svg%3E">
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body data-state="idle">
+  <!-- Top Navigation Bar -->
+  <header class="app-header">
+    <div class="header-brand">
+      <div class="brand-logo" aria-hidden="true">
+        <svg viewBox="0 0 32 32" class="logo-icon">
+          <circle cx="16" cy="16" r="13" class="logo-outer"/>
+          <circle cx="16" cy="16" r="8" class="logo-inner"/>
+          <circle cx="16" cy="16" r="3.5" class="logo-core"/>
+        </svg>
+        <span class="logo-pulse"></span>
+      </div>
+      <div class="brand-text">
+        <span class="brand-title">FocusLens</span>
+        <span class="brand-badge">AI Telemetry</span>
+      </div>
+      <div id="statusBadge" class="status-pill" role="status" aria-live="polite">
+        <span class="status-dot"></span>
+        <span id="statusText">Camera off</span>
+      </div>
+    </div>
+
+    <nav class="header-actions" aria-label="Quick controls">
+      <!-- Ambient Sound Dropdown -->
+      <div class="action-dropdown" title="Background focus soundscapes">
+        <button id="ambientBtn" class="btn-icon" aria-haspopup="true" aria-expanded="false" aria-label="Ambient sound">
+          <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+          <span class="btn-label" id="ambientLabel">Ambient: Off</span>
+        </button>
+        <div id="ambientMenu" class="dropdown-panel" hidden>
+          <div class="dropdown-header">Ambient Soundscape</div>
+          <button class="menu-item active" data-ambient="off">None (Silent)</button>
+          <button class="menu-item" data-ambient="binaural">40Hz Binaural Flow (Focus)</button>
+          <button class="menu-item" data-ambient="rain">Calm Rain &amp; Stream</button>
+          <button class="menu-item" data-ambient="brown">Deep Brown Noise</button>
+          <div class="ambient-vol">
+            <label for="ambientVol">Volume</label>
+            <input type="range" id="ambientVol" min="0" max="100" value="35">
+          </div>
+        </div>
+      </div>
+
+      <!-- Sound FX Toggle -->
+      <button id="sndToggle" class="btn-icon active" aria-pressed="true" title="Toggle audio alerts">
+        <svg viewBox="0 0 24 24" class="icon icon-sound-on" aria-hidden="true"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+        <svg viewBox="0 0 24 24" class="icon icon-sound-off" aria-hidden="true"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73 4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
+        <span class="btn-label" id="sndText">Audio Alerts</span>
+      </button>
+
+      <!-- HUD Mesh Toggle -->
+      <button id="hudToggle" class="btn-icon active" aria-pressed="true" title="Toggle AI Face &amp; Iris Mesh HUD">
+        <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+        <span class="btn-label">AI HUD</span>
+      </button>
+
+      <!-- Neutral Pose Calibration -->
+      <button id="calBtn" class="btn-ghost" disabled title="Calibrate current position as center neutral pose">
+        <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/></svg>
+        <span>Calibrate</span>
+      </button>
+
+      <!-- Privacy & Architecture Modal Trigger -->
+      <button id="privacyBtn" class="btn-ghost" title="Privacy assurance and architecture details">
+        <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg>
+        <span>Privacy</span>
+      </button>
+
+      <!-- Dark / Light Theme Toggle -->
+      <button id="themeToggle" class="btn-icon theme-btn" aria-label="Toggle dark/light theme" title="Toggle theme">
+        <svg viewBox="0 0 24 24" class="icon icon-sun" aria-hidden="true"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        <svg viewBox="0 0 24 24" class="icon icon-moon" aria-hidden="true"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main class="app-container">
+    <!-- HERO STAGE & CAMERA VIEWPORT -->
+    <section class="stage-card" aria-label="Camera tracking stage">
+      <div class="lens-viewport">
+        <video id="v" playsinline muted autoplay></video>
+        <!-- Canvas overlay for HUD Face landmarks & Iris tracking -->
+        <canvas id="hudCanvas" class="hud-layer" aria-hidden="true"></canvas>
+
+        <!-- SVG Focus Ring Indicator -->
+        <svg class="focus-ring-svg" viewBox="0 0 260 260" aria-hidden="true">
+          <circle class="ring-track" cx="130" cy="130" r="122"/>
+          <circle id="scoreRing" class="ring-fill" cx="130" cy="130" r="122"/>
+        </svg>
+
+        <!-- Idle Camera Welcome Overlay -->
+        <div id="cameraEmpty" class="lens-empty">
+          <div class="empty-glow"></div>
+          <div class="empty-icon-wrap">
+            <svg viewBox="0 0 24 24" class="empty-icon" aria-hidden="true">
+              <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+            </svg>
+          </div>
+          <h3>Private Focus Tracking</h3>
+          <p>Everything runs 100% on your device via MediaPipe WebAssembly. Zero video or telemetry leaves your browser.</p>
+          <button id="camBtn" class="btn-primary start-cam-btn">
+            <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+            <span>Start Focus Session</span>
+          </button>
+        </div>
+
+        <!-- Stage Live Badges -->
+        <div class="lens-tags">
+          <span id="fpsTag" class="tag-meta">0 FPS</span>
+          <span id="faceTag" class="tag-meta" title="Face tracking status">No Face</span>
+        </div>
+      </div>
+
+      <!-- Quick Session Controls -->
+      <div class="stage-footer">
+        <div class="sprint-widget">
+          <div class="sprint-meta">
+            <span id="sprintLabel" class="sprint-title">Focus Sprint</span>
+            <span id="sprintCycle" class="sprint-cycle">Cycle #1</span>
+          </div>
+          <div class="sprint-timer-wrap">
+            <b id="sprintTime" class="sprint-clock">25:00</b>
+            <div class="sprint-picker">
+              <select id="sprintLen" aria-label="Select sprint length">
+                <option value="15">15 min (Quick)</option>
+                <option value="25" selected>25 min (Pomodoro)</option>
+                <option value="45">45 min (Deep Work)</option>
+                <option value="60">60 min (Marathon)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="session-btn-group">
+          <button id="endBtn" class="btn-danger" disabled title="End and save this focus session">
+            <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+            <span>End Session</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- LIVE TELEMETRY & ATTENTION HUD -->
+    <section class="telemetry-card" aria-label="Real-time focus analytics">
+      <!-- Live Focus Score Dial -->
+      <div class="score-hero">
+        <div class="score-number-wrap">
+          <b id="scoreNum" class="score-display">&ndash;</b>
+          <span class="score-unit">/ 100</span>
+        </div>
+        <div class="score-headline">
+          <div class="state-indicator-row">
+            <span id="stateDot" class="state-dot"></span>
+            <h2 id="stateLabel" class="state-title">Ready to Begin</h2>
+          </div>
+          <p id="stateMsg" class="state-subtitle">Sit comfortably in natural light about 50&ndash;70 cm from your screen.</p>
+        </div>
+      </div>
+
+      <!-- Live Biometric Cards Grid -->
+      <div class="metrics-grid">
+        <!-- 1. Eye Dynamics -->
+        <div class="metric-box">
+          <div class="metric-top">
+            <span class="metric-title">Eye Dynamics</span>
+            <span id="blinkAlertTag" class="metric-pill pill-ok">Healthy</span>
+          </div>
+          <div class="metric-values">
+            <div class="metric-sub">
+              <span class="metric-k">EAR (Openness)</span>
+              <b id="earVal" class="metric-v">&ndash;</b>
+            </div>
+            <div class="metric-sub">
+              <span class="metric-k">Blinks / min</span>
+              <b id="bpmVal" class="metric-v">&ndash;</b>
+            </div>
+          </div>
+          <div class="meter-bar-track" title="Eye Openness Ratio">
+            <div id="earBar" class="meter-bar-fill" style="width: 0%;"></div>
+          </div>
+        </div>
+
+        <!-- 2. Gaze Direction -->
+        <div class="metric-box">
+          <div class="metric-top">
+            <span class="metric-title">Gaze Vector</span>
+            <b id="gazeVal" class="metric-pill pill-neutral">&ndash;</b>
+          </div>
+          <!-- 3x3 Gaze Grid Visualizer -->
+          <div class="gaze-grid" aria-hidden="true">
+            <div class="gaze-cell" data-dir="Top-Left"></div>
+            <div class="gaze-cell" data-dir="Up"></div>
+            <div class="gaze-cell" data-dir="Top-Right"></div>
+            <div class="gaze-cell" data-dir="Left"></div>
+            <div class="gaze-cell center-active" data-dir="Center"></div>
+            <div class="gaze-cell" data-dir="Right"></div>
+            <div class="gaze-cell" data-dir="Bottom-Left"></div>
+            <div class="gaze-cell" data-dir="Down"></div>
+            <div class="gaze-cell" data-dir="Bottom-Right"></div>
+          </div>
+          <span class="metric-caption">On-screen focus zone</span>
+        </div>
+
+        <!-- 3. Fatigue & Drowsiness -->
+        <div class="metric-box">
+          <div class="metric-top">
+            <span class="metric-title">Fatigue Radar</span>
+            <span id="fatigueRisk" class="metric-pill pill-ok">Optimal</span>
+          </div>
+          <div class="metric-values">
+            <div class="metric-sub">
+              <span class="metric-k">Yawns Detected</span>
+              <b id="yawnVal" class="metric-v">0</b>
+            </div>
+            <div class="metric-sub">
+              <span class="metric-k">Microsleeps</span>
+              <b id="sleepVal" class="metric-v">0</b>
+            </div>
+          </div>
+          <span id="fatigueTip" class="metric-caption">Energy levels stable</span>
+        </div>
+
+        <!-- 4. 3D Head Orientation -->
+        <div class="metric-box pose-box">
+          <div class="metric-top">
+            <span class="metric-title">3D Head Pose</span>
+            <button id="quickCalBtn" class="pill-cal-btn" title="Quick re-center">Recenter</button>
+          </div>
+          <div class="pose-sliders">
+            <div class="pose-row">
+              <span class="pose-name">Turn (Yaw)</span>
+              <div class="pose-bar">
+                <i class="pose-center-mark"></i>
+                <span id="yawPip" class="pose-pip"></span>
+              </div>
+              <b id="yawVal" class="pose-deg">0&deg;</b>
+            </div>
+            <div class="pose-row">
+              <span class="pose-name">Tilt (Pitch)</span>
+              <div class="pose-bar">
+                <i class="pose-center-mark"></i>
+                <span id="pitchPip" class="pose-pip"></span>
+              </div>
+              <b id="pitchVal" class="pose-deg">0&deg;</b>
+            </div>
+            <div class="pose-row">
+              <span class="pose-name">Lean (Roll)</span>
+              <div class="pose-bar">
+                <i class="pose-center-mark"></i>
+                <span id="rollPip" class="pose-pip"></span>
+              </div>
+              <b id="rollVal" class="pose-deg">0&deg;</b>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- GUIDED BREAK & BREATHING OVERLAY (Hidden until break time) -->
+    <section id="breakSection" class="break-overlay wide-card" hidden>
+      <div class="break-content">
+        <div class="break-badge">Focus Sprint Complete! 🎉</div>
+        <h2 class="break-heading">Recharge Your Mind &amp; Eyes</h2>
+        <p class="break-desc">Take 5 minutes to restore your cognitive bandwidth and relax your ciliary eye muscles.</p>
+        
+        <div class="break-exercise-card">
+          <div class="breathing-circle-wrap">
+            <div id="breathCircle" class="breathing-circle">
+              <span id="breathAction" class="breath-action-text">Inhale</span>
+            </div>
+          </div>
+          <div class="exercise-text">
+            <h4>4-7-8 Deep Box Breathing</h4>
+            <p id="breathStep">Breathe in quietly through the nose for 4 seconds...</p>
+            <div class="eye-relief-box">
+              <strong>💡 20-20-20 Rule:</strong> Look at an object at least 20 feet (6m) away for 20 seconds to prevent digital eye strain.
+            </div>
+          </div>
+        </div>
+
+        <div class="break-actions">
+          <button id="skipBreakBtn" class="btn-primary">Start Next Sprint</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- LIVE SESSION TIMELINE & CHARTS -->
+    <section class="wide-card" aria-label="Session timeline and trends">
+      <div class="card-header">
+        <div>
+          <h2 class="card-title">Live Session Telemetry Timeline</h2>
+          <p class="card-subtitle">Continuous focus score charting with second-by-second event telemetry</p>
+        </div>
+        <div class="card-header-actions">
+          <button id="csvBtn" class="btn-ghost" disabled title="Export telemetry as CSV file">
+            <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+            <span>Export CSV</span>
+          </button>
+          <button id="jsonBtn" class="btn-ghost" disabled title="Export session data as JSON">
+            <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+            <span>Export JSON</span>
+          </button>
+          <button id="shareCardBtn" class="btn-ghost" disabled title="Copy focus score summary card">
+            <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z"/></svg>
+            <span>Share Card</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Timeline Canvas Container with Tooltip -->
+      <div class="timeline-container">
+        <canvas id="tl" aria-label="Interactive focus score graph"></canvas>
+        <div id="chartTooltip" class="chart-tooltip" hidden>
+          <div id="tipTime" class="tip-time">00:00</div>
+          <div class="tip-data">
+            <span id="tipScore" class="tip-score">85</span>
+            <span id="tipState" class="tip-state">Focused</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Aggregate Statistics Grid -->
+      <div class="stats-summary-grid">
+        <div class="stat-card">
+          <span class="stat-label">Session Time</span>
+          <b id="elapsedVal" class="stat-val">00:00</b>
+          <span class="stat-desc">Elapsed active tracking</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Longest Flow Streak</span>
+          <b id="bestStreak" class="stat-val">&ndash;</b>
+          <span class="stat-desc">Unbroken high focus</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Longest Distraction</span>
+          <b id="dmaxVal" class="stat-val">&ndash;</b>
+          <span class="stat-desc">Max drift duration</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Mean Focus Score</span>
+          <b id="avgScore" class="stat-val">&ndash;</b>
+          <span id="avgGrade" class="stat-grade">&ndash;</span>
+        </div>
+      </div>
+
+      <!-- Focus State Distribution Bar -->
+      <div class="distribution-wrap">
+        <div class="distrib-bar" aria-hidden="true">
+          <div id="barFocused" class="bar-seg seg-focused" style="width: 0%;"></div>
+          <div id="barDistracted" class="bar-seg seg-distracted" style="width: 0%;"></div>
+          <div id="barDrowsy" class="bar-seg seg-drowsy" style="width: 0%;"></div>
+        </div>
+        <div class="distrib-legend">
+          <span class="legend-item leg-focused"><i class="dot"></i> In Flow <b id="pctFocused">0%</b></span>
+          <span class="legend-item leg-distracted"><i class="dot"></i> Distracted <b id="pctDistracted">0%</b></span>
+          <span class="legend-item leg-drowsy"><i class="dot"></i> Drowsy / Fatigued <b id="pctDrowsy">0%</b></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- HISTORICAL SESSIONS LOG -->
+    <section class="wide-card" aria-label="Session history">
+      <div class="card-header">
+        <div>
+          <h2 class="card-title">Past Sessions</h2>
+          <p class="card-subtitle">Stored privately on this machine via local browser storage</p>
+        </div>
+        <button id="clrBtn" class="btn-ghost btn-sm" title="Clear all stored session logs">Clear History</button>
+      </div>
+      <div class="history-table-wrap">
+        <ul id="historyList" class="history-list">
+          <li class="history-empty">No previous sessions yet. Finish a session of at least 10 seconds to log history.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- PRIVACY ASSURANCE BANNER -->
+    <footer class="app-footer">
+      <div class="footer-privacy">
+        <svg viewBox="0 0 24 24" class="icon-secure" aria-hidden="true"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg>
+        <span><strong>100% Client-Side Privacy:</strong> Computer vision inference runs entirely inside your browser using Google MediaPipe &amp; WebAssembly. No frames, audio, or biometric data are transmitted over the internet.</span>
+      </div>
+      <div class="footer-meta">
+        <span>FocusLens Open Source</span>
+        <span>•</span>
+        <a href="https://github.com/Ak-arsha/focuslens" target="_blank" rel="noopener noreferrer">GitHub Repository</a>
+      </div>
+    </footer>
+  </main>
+
+  <!-- PRIVACY & ARCHITECTURE MODAL -->
+  <dialog id="privacyModal" class="modal-dialog">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div class="modal-title-row">
+          <svg viewBox="0 0 24 24" class="icon-modal" aria-hidden="true"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg>
+          <h3>Privacy &amp; Security Architecture</h3>
+        </div>
+        <button id="closeModalBtn" class="btn-close" aria-label="Close dialog">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="privacy-bullet">
+          <h4>🔒 Zero Server Uploads</h4>
+          <p>The webcam stream is piped directly into an HTML5 <code>&lt;video&gt;</code> element in memory and passed frame-by-frame to the client-side Google MediaPipe Face Landmarker model. Not a single pixel is ever uploaded to any server or cloud API.</p>
+        </div>
+        <div class="privacy-bullet">
+          <h4>⚡ Pure WebAssembly + WebGL Acceleration</h4>
+          <p>Face detection, blendshape calculation (jaw open, eye look vector), and 3D facial matrix estimation are computed locally on your GPU/CPU via WebAssembly (WASM).</p>
+        </div>
+        <div class="privacy-bullet">
+          <h4>📁 Local-Only Session Logs</h4>
+          <p>Session summaries and focus scores are saved exclusively in your browser's <code>localStorage</code>. You can export them to CSV/JSON or wipe them anytime with one click.</p>
+        </div>
+        <div class="privacy-bullet">
+          <h4>🎵 Synthesized Procedural Audio</h4>
+          <p>All ambient soundscapes (40Hz Binaural Beats, Rain, Brown noise) and notification chimes are synthesized on the fly via the browser's native Web Audio API oscillators and filters. Zero external audio files are downloaded.</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="closeModalOk" class="btn-primary">Understood</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- SHARE FOCUS CARD MODAL -->
+  <dialog id="shareModal" class="modal-dialog">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Share Your Focus Session</h3>
+        <button id="closeShareBtn" class="btn-close" aria-label="Close dialog">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="shareCardPreview" class="share-card-render">
+          <div class="sc-header">
+            <span class="sc-logo">🎯 FocusLens</span>
+            <span id="scDate" class="sc-date">Oct 27, 2026</span>
+          </div>
+          <div class="sc-score-row">
+            <div class="sc-score-big" id="scScore">92</div>
+            <div class="sc-grade-badge" id="scGrade">Grade S • Deep Work Flow</div>
+          </div>
+          <div class="sc-metrics-grid">
+            <div class="sc-m"><span>Sprint Time</span><strong id="scTime">25:00</strong></div>
+            <div class="sc-m"><span>Flow Percentage</span><strong id="scFlow">94%</strong></div>
+            <div class="sc-m"><span>Longest Streak</span><strong id="scStreak">21:40</strong></div>
+            <div class="sc-m"><span>Distractions</span><strong id="scDist">1 incident</strong></div>
+          </div>
+          <div class="sc-footer">
+            <span>Client-side AI Focus Telemetry</span>
+            <span>focuslens.vercel.app</span>
+          </div>
+        </div>
+        <p class="share-hint">Copy the formatted text summary to your clipboard to paste into Slack, Discord, or X (Twitter)!</p>
+      </div>
+      <div class="modal-footer">
+        <button id="copyShareText" class="btn-primary">Copy Summary to Clipboard</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Notification Toast -->
+  <div id="toast" class="toast-popup" hidden role="alert" aria-live="polite"></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
