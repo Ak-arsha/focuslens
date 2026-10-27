@@ -1,6 +1,6 @@
 # FocusLens
 
-> Private, on-device AI webcam telemetry for deep work, posture awareness, and digital eye strain prevention.
+> Private, on-device AI webcam telemetry for deep work, posture awareness, digital eye strain prevention, and facial affect analysis.
 
 [Live Demo](https://focuslens-lilac.vercel.app) | [GitHub Repository](https://github.com/Ak-arsha/focuslens)
 
@@ -8,11 +8,11 @@
 
 ## Overview
 
-FocusLens is an intelligent, client-side attention studio built with React, JavaScript, Three.js, and Google MediaPipe. It helps software engineers, researchers, and remote knowledge workers sustain cognitive flow while proactively safeguarding visual and musculoskeletal health.
+FocusLens is an intelligent, client-side attention studio built with React, JavaScript, Three.js, and Google MediaPipe. It helps software engineers, researchers, and remote knowledge workers sustain cognitive flow while proactively safeguarding visual, posture, and musculoskeletal health.
 
-Prolonged computer sessions often lead to unconscious attention drift, digital eye strain (asthenopia) caused by drastically reduced blink rates, and neck/back fatigue from poor ergonomics. Traditional computer vision tools attempt to address this by streaming webcam footage to cloud servers, introducing severe privacy and latency concerns.
+Prolonged computer sessions often lead to unconscious attention drift, digital eye strain (asthenopia) caused by drastically reduced blink rates, neck/back fatigue from poor ergonomics, and accumulated facial muscle tension. Traditional computer vision tools attempt to address this by streaming webcam footage to cloud servers, introducing severe privacy and latency concerns.
 
-FocusLens eliminates this compromise. Powered by Google MediaPipe Tasks Vision running locally via WebAssembly and WebGL, FocusLens processes every video frame in temporary browser memory. Video feeds, audio, and biometric metrics never leave your machine. A real-time Three.js 3D Holographic Head Wireframe mirrors your head pose orientation in real-time, giving you instantaneous ergonomic awareness.
+FocusLens eliminates this compromise. Powered by Google MediaPipe Tasks Vision running locally via WebAssembly and WebGL, FocusLens processes every video frame in volatile browser memory. Video feeds, audio, and biometric metrics never leave your machine. A real-time Three.js 3D Holographic Head Wireframe mirrors your head pose orientation in real-time, giving you instantaneous ergonomic awareness.
 
 ---
 
@@ -22,32 +22,37 @@ FocusLens eliminates this compromise. Powered by Google MediaPipe Tasks Vision r
 1. **Unconscious Attention Drift**: Multitasking and environmental distractions break cognitive flow states without immediate feedback.
 2. **Digital Eye Strain (Screen Staring Syndrome)**: Research indicates that computer users blink 66% less frequently when looking at digital displays, leading to dry eyes and ocular fatigue.
 3. **Ergonomic Posture Decay**: Users tilt, turn, and slouch their heads over long hours without realizing their deviation from a neutral posture.
-4. **Webcam Privacy Risks**: Cloud-based vision solutions require transmitting sensitive home or office video streams across the internet.
+4. **Cognitive & Emotional Fatigue**: Subconscious brow furrowing, jaw clenching, and eye squinting signal cognitive overload and strain.
+5. **Webcam Privacy Risks**: Cloud-based vision solutions require transmitting sensitive home or office video streams across the internet.
 
 ### Objectives
-- Compute real-time biometric indicators (Eye Aspect Ratio, blink rate, 3D head pose, gaze vectors) purely on-device at 30 to 60 FPS.
+- Compute real-time biometric indicators (Eye Aspect Ratio, blink rate, 3D head pose, gaze vectors, facial sentiment) purely on-device at 30 to 60 FPS.
 - Render an interactive 3D WebGL Holographic head visualizer synchronized to real-time pitch, yaw, and roll telemetry.
-- Provide objective, adaptive focus scoring (0 to 100) with non-intrusive feedback.
-- Detect digital eye strain and drowsiness in real time using peer-reviewed facial landmark algorithms.
-- Structure productivity into customizable focus sprints with guided 4-7-8 box breathing recovery breaks.
+- Project clear ergonomic posture alignment guidelines (vertical plumb axis, horizontal eye level, and directional posture correction cues).
+- Analyze real-time facial sentiment and emotional valence from 52 blendshapes (Calm Flow, Problem Solving, Cognitive Strain, Eye Squinting).
+- Provide objective, adaptive focus scoring (0 to 100) with non-intrusive feedback and procedural audio soundscapes.
+- Offer comprehensive keyboard shortcut controls and a structured session completion summary dialog.
 - Ensure 100% zero-knowledge data privacy with client-side execution and local persistence.
 
 ---
 
 ## Key Features
 
+- **Ergonomic Posture Alignment Guidelines**: Real-time vertical plumb axis and eye-level horizon lines directly on the camera stage with active status cues (Turn Left/Right, Slouching Down, Tilted Upward).
 - **Interactive Three.js 3D Head Hologram**: Real-time WebGL cybernetic wireframe avatar that mirrors your yaw, pitch, and roll in real-time with state-reactive coloration.
-- **Dual Viewport Interface**: Toggle between Widescreen Studio View (with live AI mesh overlay and corner reticles) and Minimalist Circular Lens View.
+- **Facial Sentiment & Affect Telemetry**: Continuous analysis of facial muscle tone and emotional valence (-100% to +100%) detecting calm engagement, intense problem solving, cognitive strain, and squinting.
 - **Eye Dynamics and Blink Rate Telemetry**: Continuous measurement of Eye Aspect Ratio (EAR) and 60-second sliding-window Blinks Per Minute (BPM) with digital eye-strain warnings.
+- **Dual Viewport Interface**: Toggle between Widescreen Studio View (with live AI mesh overlay and corner reticles) and Minimalist Circular Lens View.
 - **3D Head Pose Tracking**: Real-time calculation of Yaw (horizontal turn), Pitch (vertical tilt), and Roll (lateral lean) with one-click neutral baseline recalibration.
 - **3x3 Gaze Vector Matrix**: Directional gaze detection determining whether attention is centered on-screen or directed off-screen.
 - **Fatigue and Microsleep Detection**: Automatic identification of jaw opening (yawns) and prolonged eye closures (microsleeps) with dynamic risk level indicators.
 - **Adaptive Flow Score Engine**: Continuous 0 to 100 score dial reflecting uninterrupted focus, drifting attention, or fatigue.
+- **Expanded Procedural Soundscapes**: Six in-browser procedural audio modes synthesized via the native Web Audio API (40Hz Gamma Binaural Beats, Deep Brown Noise, Calm Forest Rain, Ocean Waves, Cosmic Drone 432Hz, and White Noise) plus auditionable alert chimes.
 - **Configurable Focus Sprints**: Pomodoro-style sprints (15, 25, 45, or 60 minutes) with cycle counting and manual break triggers.
 - **Guided Restorative Break Mode**: Box breathing companion (4s inhale, 7s hold, 8s exhale) combined with the 20-20-20 eye relief guide.
-- **Procedural Ambient Soundscapes**: In-browser audio synthesized via the Web Audio API, including 40 Hz Binaural Beat (Gamma frequency focus), Calm Rain, and Deep Brown Noise.
-- **Interactive Longitudinal Timeline**: High-DPI HTML5 canvas chart with mouse scrubbing tooltips displaying historical scores and states.
-- **Session Data Portability**: Export complete second-by-second telemetry to CSV, download structured JSON session logs, or copy formatted text summary cards to clipboard.
+- **Comprehensive Session Summary Dialog**: Clear direction upon ending a session with complete breakdown of focus grade, flow ratio, posture alignment percentage, dominant affect, and export actions.
+- **Full Keyboard Shortcuts Suite**: Complete keyboard controls for hands-free productivity (`Space`, `R`, `B`, `E`, `M`, `H`, `T`, `?`).
+- **Seamless Light & Dark Theme**: Fully responsive design supporting both light mode and dark mode with high-contrast accessibility.
 
 ---
 
@@ -56,7 +61,7 @@ FocusLens eliminates this compromise. Powered by Google MediaPipe Tasks Vision r
 ### Technology Stack
 - **Frontend Framework**: React 18 (JavaScript / JSX)
 - **3D Graphics & Rendering**: Three.js (WebGL icosahedron procedural head geometry)
-- **Styling & UI**: Tailwind CSS, Lucide React icons
+- **Styling & Design System**: Tailwind CSS, Lucide React icons, CSS Custom Properties
 - **Computer Vision Model**: Google MediaPipe Face Landmarker (v0.10.14)
 - **Runtime Acceleration**: WebAssembly (WASM), WebGL, WebGPU
 - **Audio Synthesis**: Native Web Audio API (OscillatorNode, BiquadFilterNode, StereoPannerNode, AudioBufferSourceNode)
@@ -72,17 +77,36 @@ The following diagram illustrates the end-to-end FocusLens pipeline, from webcam
 
 ---
 
+## Keyboard Shortcuts
+
+FocusLens includes comprehensive keyboard controls for frictionless workflow management:
+
+| Key | Action | Description |
+|---|---|---|
+| `Space` | Start / Pause | Launches webcam telemetry or pauses active session |
+| `R` | Recenter | Calibrates current head orientation as neutral baseline |
+| `B` | Take Break | Triggers restorative 4-7-8 box breathing recovery cycle |
+| `E` | End Session | Concludes tracking and opens comprehensive focus summary |
+| `M` | Toggle Audio | Mutes or unmutes focus sound effects and alerts |
+| `H` | Toggle HUD | Toggles AI landmark mesh and posture alignment overlay |
+| `T` | Toggle Theme | Switches between Light Mode and Dark Mode |
+| `?` or `K` | Help | Displays keyboard shortcuts cheat sheet |
+| `Esc` | Dismiss | Closes any open modal dialog |
+
+---
+
 ## Demo and Interface
 
 The application interface is divided into functional operational zones:
 
-1. **Top Navigation**: Live connection status pill, real-time AI HUD toggle, sound effects toggle, neutral pose calibration, privacy documentation, theme toggle, and GitHub repository link.
-2. **Camera Studio Stage**: Webcam viewport supporting Studio and Lens modes, FPS and face detection indicators, circular progress dial, sprint countdown clock, and session controls.
-3. **Biometrics Command Center**: Central 0 to 100 focus score dial, dynamic state headline, and metric cards for Eye Dynamics, Gaze Vector, Fatigue Radar, and 3D Orientation Gauges.
-4. **Three.js 3D Posture Hologram**: Low-poly cybernetic mesh rendering in real-time WebGL with smooth slerp interpolation matching the user's facial transformation matrix.
-5. **Ambient Soundscape Deck**: Procedural sound selector (40Hz Binaural Beats, Calm Rain, Deep Brown Noise) with volume slider.
-6. **Interactive Telemetry Timeline**: Second-by-second focus score graph with hover scrubbers and KPI stat boxes (Session Duration, Longest Flow Streak, Longest Distraction, Mean Score).
-7. **Historical Archive**: Local session logs showing date, duration, flow percentage, average score, and letter grade ratings.
+1. **Top Navigation**: Live connection status pill, real-time AI HUD toggle, sound effects toggle, neutral pose calibration, keyboard shortcuts guide, dark/light mode toggle, and GitHub repository link.
+2. **Clarity Overview Strip**: Quick onboarding guide explaining system capabilities, privacy guarantees, and shortcut access.
+3. **Camera Studio Stage**: Webcam viewport supporting Studio and Lens modes, ergonomic posture alignment crosshair and eye-level horizon line, FPS indicator, circular progress dial, and sprint countdown clock.
+4. **Biometrics Command Center**: Central 0 to 100 focus score dial, dynamic state headline, and metric cards for Eye Dynamics, Facial Sentiment, Gaze Vector, Fatigue Radar, and 3D Orientation Gauges with green safe-zone bounds.
+5. **Three.js 3D Posture Hologram**: Low-poly cybernetic mesh rendering in real-time WebGL with smooth slerp interpolation matching the user's facial transformation matrix.
+6. **Ambient Soundscape Deck**: Six procedural sound selector buttons with volume slider and audio audition buttons.
+7. **Interactive Telemetry Timeline**: Second-by-second focus score graph with hover scrubbers and KPI stat boxes (Session Duration, Longest Flow Streak, Longest Distraction, Mean Score).
+8. **Historical Archive**: Local session logs showing date, duration, flow percentage, average score, and letter grade ratings.
 
 Live URL: [https://focuslens-lilac.vercel.app](https://focuslens-lilac.vercel.app)
 
@@ -94,26 +118,29 @@ Live URL: [https://focuslens-lilac.vercel.app](https://focuslens-lilac.vercel.ap
 focuslens/
 ├── docs/
 │   └── images/
-│       └── architecture.png   # End-to-end system architecture diagram
+│       └── architecture.png        # End-to-end system architecture diagram
 ├── src/
 │   ├── components/
-│   │   ├── AmbientSoundDeck.jsx    # Procedural Web Audio ambient soundscapes
-│   │   ├── BiometricsGrid.jsx      # Telemetry cards & head pose gauges
-│   │   ├── CameraStage.jsx         # Web camera viewport & AI canvas HUD
+│   │   ├── AboutModal.jsx          # Educational architecture & system overview modal
+│   │   ├── AmbientSoundDeck.jsx    # Procedural Web Audio ambient soundscapes & cue tester
+│   │   ├── BiometricsGrid.jsx      # Telemetry cards, sentiment affect & posture gauges
+│   │   ├── CameraStage.jsx         # Web camera viewport & ergonomic alignment guidelines
 │   │   ├── GuidedBreakModal.jsx    # 4-7-8 breathing circle & 20-20-20 rule
-│   │   ├── HistoryArchive.jsx      # Local storage session records
+│   │   ├── HistoryArchive.jsx      # Local storage session records & clear history
+│   │   ├── KeyboardShortcutsModal.jsx # Quick reference dialog for all keyboard shortcuts
 │   │   ├── Navbar.jsx              # Status toolbar & navigation actions
 │   │   ├── PrivacyModal.jsx        # 100% on-device privacy guarantee
+│   │   ├── SessionSummaryModal.jsx # Comprehensive session conclusion & stats dialog
 │   │   ├── ShareModal.jsx          # Clipboard summary card generator
-│   │   ├── SprintController.jsx    # Pomodoro sprint timer controls
+│   │   ├── SprintController.jsx    # Pomodoro sprint timer & End Session controls
 │   │   ├── ThreeHeadVisualizer.jsx # Three.js WebGL 3D head hologram
 │   │   └── TimelineChart.jsx       # High-DPI canvas telemetry chart
 │   ├── hooks/
-│   │   └── useFaceLandmarker.js    # MediaPipe WebAssembly inference loop
+│   │   └── useFaceLandmarker.js    # MediaPipe WebAssembly inference loop & sentiment analysis
 │   ├── utils/
-│   │   └── audio.js                # Web Audio API synthesizers & chimes
-│   ├── App.jsx                     # Root application state coordinator
-│   ├── index.css                   # Tailwind directives & design tokens
+│   │   └── audio.js                # Web Audio API synthesizers & sound effect cues
+│   ├── App.jsx                     # Root application state & keyboard listener coordinator
+│   ├── index.css                   # Tailwind directives & dark/light theme CSS variables
 │   └── main.jsx                    # Application entry point
 ├── index.html                      # HTML5 root shell
 ├── package.json                    # Dependencies and build scripts
@@ -166,13 +193,13 @@ npm run preview
 
 ## Usage and Workflow
 
-1. **Activate the Camera**: Click **Start Camera Session**. Grant the browser permission to access your webcam when prompted.
-2. **Calibrate Neutral Baseline**: Sit in your normal working posture approximately 50 to 70 cm from the monitor, look at the center of your screen, and click **Recenter**.
+1. **Activate the Camera**: Click **Start Camera Session** or press `Space`. Grant the browser permission to access your webcam when prompted.
+2. **Align Posture & Calibrate**: Sit in your normal working posture approximately 50 to 70 cm from the monitor, look at the center of your screen matching the alignment guide lines, and press `R` (or click **Recenter**).
 3. **Set Sprint Duration**: Select your preferred sprint length (15m, 25m, 45m, or 60m) using the chips in the sprint controller.
-4. **Select Ambient Soundscape (Optional)**: Choose an ambient background mode (40Hz Binaural Flow, Calm Rain, or Deep Brown Noise) and adjust the volume slider.
-5. **Work in Flow**: FocusLens continuously measures your engagement. If your head turns away or eyes close for prolonged periods, a gentle notification chime sounds.
-6. **Take Restorative Breaks**: When your sprint ends (or upon clicking **Take Break**), follow the 4-7-8 breathing circle and look 20 feet away for 20 seconds.
-7. **End and Export**: Click **End Session** to store the run in your local history. Export raw metrics via **Export CSV** or **Export JSON**.
+4. **Select Ambient Soundscape (Optional)**: Choose an ambient background mode (40Hz Binaural Flow, Ocean Surf, Calm Rain, Cosmic Drone, Deep Brown Noise, or White Noise) and adjust the volume slider.
+5. **Work in Flow**: FocusLens continuously measures your engagement. If your head turns away, eyes close, or cognitive stress is detected for prolonged periods, gentle notification chimes sound.
+6. **Take Restorative Breaks**: When your sprint ends (or upon pressing `B`), follow the 4-7-8 breathing circle and look 20 feet away for 20 seconds.
+7. **End and Review Summary**: Press `E` (or click **End Session**) to view your comprehensive focus grade, posture alignment score, and dominant sentiment. Export raw metrics via **Export CSV** or **Export JSON**.
 
 ---
 
@@ -200,10 +227,14 @@ To eliminate jitter while maintaining responsiveness, an exponential moving aver
 
 $$\mathbf{S}_t = \alpha \mathbf{X}_t + (1 - \alpha) \mathbf{S}_{t-1}$$
 
-### 3. Focus Score Dynamics
-The live focus score $S \in [0, 100]$ smoothly interpolates toward a state target score ($T_{\text{focused}} = 100$, $T_{\text{distracted}} = 38$, $T_{\text{drowsy}} = 10$) using an adaptive exponential transition:
+### 3. Facial Sentiment & Affect Scoring
+Derived continuously from facial blendshapes measuring smile intensity, brow furrow, and ocular squinting:
 
-$$S_{t} = S_{t-1} + (T - S_{t-1}) \times \min\left(1, \frac{\Delta t}{1500}\right)$$
+$$\text{Smile} = \frac{\text{mouthSmileLeft} + \text{mouthSmileRight}}{2}$$
+
+$$\text{Tension} = \frac{\text{browDownLeft} + \text{browDownRight}}{2} \times 0.7 + \text{jawClench} \times 0.3$$
+
+$$\text{Valence} = \text{clamp}\left(-100, +100, 50 + (\text{Smile} \times 100) - (\text{Tension} \times 120)\right)$$
 
 ### 4. Frame Rate and Hardware Benchmarks
 - **Average Inference Latency**: 16 ms to 32 ms per frame on standard integrated GPUs (Intel Iris Xe / AMD Radeon Vega).
