@@ -2,12 +2,85 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+:root, html[data-theme="dark"], html.dark {
   color-scheme: dark;
+  --bg-primary: #020617;
+  --bg-card: rgba(15, 23, 42, 0.7);
+  --bg-card-hover: rgba(30, 41, 59, 0.7);
+  --bg-elevated: #090e1a;
+  --bg-inset: #020617;
+  --border-subtle: rgba(51, 65, 85, 0.6);
+  --border-strong: rgba(71, 85, 105, 0.8);
+  --text-heading: #f8fafc;
+  --text-body: #cbd5e1;
+  --text-muted: #94a3b8;
+  --text-faint: #64748b;
+  --hud-overlay: rgba(2, 6, 23, 0.95);
 }
 
-[data-theme="light"] {
+html[data-theme="light"], html.light {
   color-scheme: light;
+  --bg-primary: #f1f5f9;
+  --bg-card: rgba(255, 255, 255, 0.9);
+  --bg-card-hover: rgba(248, 250, 252, 1);
+  --bg-elevated: #ffffff;
+  --bg-inset: #e2e8f0;
+  --border-subtle: rgba(203, 213, 225, 0.9);
+  --border-strong: rgba(148, 163, 184, 0.8);
+  --text-heading: #0f172a;
+  --text-body: #334155;
+  --text-muted: #64748b;
+  --text-faint: #94a3b8;
+  --hud-overlay: rgba(248, 250, 252, 0.95);
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-heading);
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+/* Reusable Theme Card & Panel Utilities */
+.theme-panel {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-heading);
+  backdrop-filter: blur(12px);
+  transition: background-color 0.25s ease, border-color 0.25s ease;
+}
+
+.theme-inset {
+  background-color: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+  transition: background-color 0.25s ease, border-color 0.25s ease;
+}
+
+.theme-btn-secondary {
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-body);
+  transition: all 0.15s ease;
+}
+.theme-btn-secondary:hover {
+  background-color: var(--bg-card-hover);
+  color: var(--text-heading);
+  border-color: var(--border-strong);
+}
+
+.theme-text-heading {
+  color: var(--text-heading);
+}
+
+.theme-text-body {
+  color: var(--text-body);
+}
+
+.theme-text-muted {
+  color: var(--text-muted);
+}
+
+.theme-text-faint {
+  color: var(--text-faint);
 }
 
 /* Custom Scrollbars */
@@ -21,10 +94,10 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: var(--border-strong);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: var(--text-muted);
 }
