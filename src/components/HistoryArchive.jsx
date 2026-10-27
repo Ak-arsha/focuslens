@@ -17,19 +17,19 @@ export const HistoryArchive = ({
   };
 
   return (
-    <div className="w-full flex flex-col gap-3 p-5 bg-slate-900/60 border border-slate-800/80 rounded-xl">
+    <div className="theme-panel w-full flex flex-col gap-3 p-5 rounded-xl shadow-sm">
       <div className="flex items-center justify-between">
         <div>
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
+          <span className="text-[10px] font-bold uppercase tracking-wider theme-text-faint block">
             Local Data Archive
           </span>
-          <h2 className="font-display text-base font-bold text-slate-200">Past Focus Sessions</h2>
+          <h2 className="font-display text-base font-bold theme-text-heading">Past Focus Sessions</h2>
         </div>
 
         <button
           onClick={onClearHistory}
           disabled={!history.length}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-xs font-semibold text-slate-400 hover:text-slate-200 border border-slate-700 transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg theme-btn-secondary disabled:opacity-40 text-xs font-semibold transition-colors"
         >
           <Trash2 className="w-3.5 h-3.5" />
           <span>Clear History</span>
@@ -37,9 +37,9 @@ export const HistoryArchive = ({
       </div>
 
       <div className="w-full overflow-x-auto">
-        <ul className="flex flex-col divide-y divide-slate-800/80">
+        <ul className="flex flex-col divide-y divide-slate-200 dark:divide-slate-800/80">
           {!history.length ? (
-            <li className="py-8 text-center text-xs text-slate-500">
+            <li className="py-8 text-center text-xs theme-text-muted">
               No recorded sessions yet. Completed sessions over 10 seconds are securely saved here on this device.
             </li>
           ) : (
@@ -55,14 +55,14 @@ export const HistoryArchive = ({
               return (
                 <li
                   key={item.id}
-                  className="grid grid-cols-2 sm:grid-cols-5 items-center gap-4 py-3 px-2 text-xs text-slate-300 hover:bg-slate-800/40 rounded transition-colors"
+                  className="grid grid-cols-2 sm:grid-cols-5 items-center gap-4 py-3 px-2 text-xs theme-text-body hover:bg-slate-200/50 dark:hover:bg-slate-800/40 rounded transition-colors"
                 >
-                  <span className="font-medium text-slate-200">{dateStr}</span>
-                  <span className="font-mono text-slate-400">{formatTime(item.duration)}</span>
-                  <span className="font-semibold text-emerald-400">{item.flowPct}% flow</span>
-                  <span className="font-mono font-bold text-slate-200">Score: {item.avgScore}</span>
+                  <span className="font-medium theme-text-heading">{dateStr}</span>
+                  <span className="font-mono theme-text-muted">{formatTime(item.duration)}</span>
+                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">{item.flowPct}% flow</span>
+                  <span className="font-mono font-bold theme-text-heading">Score: {item.avgScore}</span>
                   <span className="text-right">
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
                       {grade}
                     </span>
                   </span>

@@ -44,20 +44,20 @@ Privacy: 100% Client-Side Processing - https://focuslens-lilac.vercel.app`;
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-      <div className="relative w-full max-w-md p-6 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl flex flex-col gap-4 text-slate-200 animate-in fade-in zoom-in-95 duration-200">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-          <h3 className="font-display text-base font-bold text-slate-100">Share Focus Summary</h3>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md">
+      <div className="relative w-full max-w-md p-6 theme-panel rounded-2xl shadow-2xl flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-200">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+          <h3 className="font-display text-base font-bold theme-text-heading">Share Focus Summary</h3>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="p-1.5 rounded-lg theme-text-muted hover:theme-text-heading theme-btn-secondary"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Visual Card Preview */}
-        <div className="p-5 rounded-xl bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950/40 border border-slate-700 shadow-xl flex flex-col gap-4">
+        <div className="p-5 rounded-xl bg-gradient-to-br from-slate-900 via-slate-950 to-emerald-950 text-slate-100 border border-slate-700 shadow-xl flex flex-col gap-4">
           <div className="flex justify-between items-center text-xs">
             <span className="font-display font-bold text-slate-100">FocusLens Studio</span>
             <span className="text-slate-400 font-mono text-[11px]">{today}</span>
@@ -73,36 +73,36 @@ Privacy: 100% Client-Side Processing - https://focuslens-lilac.vercel.app`;
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 p-3 bg-slate-950/80 rounded-lg border border-slate-800/80 text-xs">
+          <div className="grid grid-cols-2 gap-2 p-3 bg-black/40 rounded-lg border border-slate-800 text-xs">
             <div>
-              <span className="text-[10px] uppercase text-slate-500 block">Duration</span>
+              <span className="text-[10px] uppercase text-slate-400 block">Duration</span>
               <strong className="font-mono text-slate-200">{formatTime(durationMs)}</strong>
             </div>
             <div>
-              <span className="text-[10px] uppercase text-slate-500 block">Flow Rate</span>
+              <span className="text-[10px] uppercase text-slate-400 block">Flow Rate</span>
               <strong className="font-mono text-emerald-400">{flowPct}%</strong>
             </div>
             <div>
-              <span className="text-[10px] uppercase text-slate-500 block">Best Streak</span>
+              <span className="text-[10px] uppercase text-slate-400 block">Best Streak</span>
               <strong className="font-mono text-slate-200">{formatTime(bestStreakMs)}</strong>
             </div>
             <div>
-              <span className="text-[10px] uppercase text-slate-500 block">Yawns</span>
+              <span className="text-[10px] uppercase text-slate-400 block">Yawns</span>
               <strong className="font-mono text-slate-200">{yawns} detected</strong>
             </div>
           </div>
 
-          <div className="flex justify-between items-center text-[10px] text-slate-500 border-t border-slate-800 pt-2">
+          <div className="flex justify-between items-center text-[10px] text-slate-400 border-t border-slate-800 pt-2">
             <span>https://focuslens-lilac.vercel.app</span>
             <span>100% Private On-Device AI</span>
           </div>
         </div>
 
-        <p className="text-xs text-slate-400 text-center">
-          Copy this formatted summary to your clipboard to paste into Slack, Discord, LinkedIn, or X!
+        <p className="text-xs theme-text-muted text-center">
+          Copy this formatted summary to your clipboard to paste into Slack, Discord, LinkedIn, or notes.
         </p>
 
-        <div className="flex justify-end pt-2 border-t border-slate-800">
+        <div className="flex justify-end pt-2 border-t border-slate-200 dark:border-slate-800">
           <button
             onClick={handleCopy}
             className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-colors shadow-lg shadow-emerald-500/20"
