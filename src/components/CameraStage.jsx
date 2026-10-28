@@ -47,41 +47,48 @@ export const CameraStage = ({
         {/* Clear Ergonomic Posture Alignment Guidelines (When Tracking) */}
         {isTracking && !showHologram && (
           <div className="absolute inset-0 pointer-events-none z-15 flex items-center justify-center">
-            {/* Center Vertical Plumb Axis */}
+            {/* Center Vertical Plumb Axis with Glow */}
             <div
-              className={`absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-0.5 transition-colors duration-200 ${
-                alignment.isAligned ? 'bg-emerald-500/40 shadow-sm shadow-emerald-500/50' : 'bg-amber-400/50 border-dashed'
-              }`}
-            />
-
-            {/* Horizontal Eye-Horizon Level Line */}
-            <div
-              className={`absolute left-0 right-0 top-[40%] -translate-y-1/2 h-0.5 transition-colors duration-200 ${
-                alignment.isAligned ? 'bg-emerald-500/40 shadow-sm shadow-emerald-500/50' : 'bg-amber-400/50 border-dashed'
-              }`}
-            />
-
-            {/* Target Posture Bounding Oval */}
-            <div
-              className={`w-44 h-56 rounded-[50%] border-2 transition-all duration-300 pointer-events-none flex items-center justify-center ${
+              className={`absolute top-0 bottom-0 left-1/2 -translate-x-1/2 transition-all duration-200 ${
                 alignment.isAligned
-                  ? 'border-emerald-500/60 shadow-[0_0_15px_rgba(16,185,129,0.25)]'
-                  : 'border-amber-400/70 border-dashed shadow-[0_0_15px_rgba(245,158,11,0.2)]'
+                  ? 'w-0.5 bg-emerald-400/70 shadow-[0_0_10px_rgba(16,185,129,0.8)]'
+                  : 'w-0.5 bg-amber-400/80 shadow-[0_0_10px_rgba(245,158,11,0.8)] border-dashed'
+              }`}
+            />
+
+            {/* Horizontal Eye-Horizon Level Line with Glow */}
+            <div
+              className={`absolute left-0 right-0 top-[40%] -translate-y-1/2 transition-all duration-200 ${
+                alignment.isAligned
+                  ? 'h-0.5 bg-emerald-400/70 shadow-[0_0_10px_rgba(16,185,129,0.8)]'
+                  : 'h-0.5 bg-amber-400/80 shadow-[0_0_10px_rgba(245,158,11,0.8)] border-dashed'
+              }`}
+            />
+
+            {/* Target Posture Bounding Oval & Reticle */}
+            <div
+              className={`relative w-48 h-60 rounded-[50%] border-2 transition-all duration-300 pointer-events-none flex items-center justify-center ${
+                alignment.isAligned
+                  ? 'border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.4)]'
+                  : 'border-amber-400 border-dashed shadow-[0_0_20px_rgba(245,158,11,0.4)]'
               }`}
             >
-              <div className="relative w-6 h-6">
-                <span className="absolute top-1/2 inset-x-0 h-0.5 bg-white/70" />
-                <span className="absolute left-1/2 inset-y-0 w-0.5 bg-white/70" />
+              {/* Center Crosshair Target */}
+              <div className="relative w-8 h-8">
+                <span className={`absolute top-1/2 inset-x-0 h-0.5 ${alignment.isAligned ? 'bg-emerald-300' : 'bg-amber-300'}`} />
+                <span className={`absolute left-1/2 inset-y-0 w-0.5 ${alignment.isAligned ? 'bg-emerald-300' : 'bg-amber-300'}`} />
               </div>
             </div>
 
-            {/* Line Guideline Labels */}
-            <span className="absolute top-[41%] left-3 text-[9px] font-mono uppercase tracking-widest text-slate-300/80 bg-black/60 px-1.5 py-0.5 rounded">
-              Eye Horizon
-            </span>
-            <span className="absolute bottom-10 left-1/2 -translate-x-1/2 text-[9px] font-mono uppercase tracking-widest text-slate-300/80 bg-black/60 px-2 py-0.5 rounded">
-              Vertical Plumb Axis
-            </span>
+            {/* Line Guideline Badges with Clear Explanations */}
+            <div className="absolute top-[41%] left-3 flex items-center gap-1.5 text-[9px] font-mono uppercase tracking-wider text-white bg-black/80 px-2 py-0.5 rounded border border-white/10 shadow-md">
+              <span className={`w-1.5 h-1.5 rounded-full ${alignment.isAligned ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+              <span>Eye Horizon Line</span>
+            </div>
+            <div className="absolute bottom-12 left-1/2 -translate-x-1/2 flex items-center gap-1.5 text-[9px] font-mono uppercase tracking-wider text-white bg-black/80 px-2.5 py-0.5 rounded border border-white/10 shadow-md">
+              <span className={`w-1.5 h-1.5 rounded-full ${alignment.isAligned ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+              <span>Vertical Plumb Axis</span>
+            </div>
           </div>
         )}
 

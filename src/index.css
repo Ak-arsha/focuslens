@@ -119,6 +119,35 @@ body {
   color: var(--text-faint);
 }
 
+/* Theme Aliases for backward & component compatibility */
+.theme-panel {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-heading);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+.theme-inset {
+  background-color: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+}
+.theme-btn-secondary {
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-body);
+  transition: all 0.12s ease;
+}
+.theme-btn-secondary:hover {
+  background-color: var(--bg-card-hover);
+  color: var(--text-heading);
+  border-color: var(--border-strong);
+}
+.theme-text-heading { color: var(--text-heading); }
+.theme-text-body { color: var(--text-body); }
+.theme-text-muted { color: var(--text-muted); }
+.theme-text-faint { color: var(--text-faint); }
+
 /* Tabular figures for telemetry numbers */
 .num-mono {
   font-family: 'JetBrains Mono', monospace;
