@@ -165,12 +165,16 @@ export const CameraStage = ({
               Real-time cognitive focus telemetry, cervical posture awareness, and dry-eye blink tracking running entirely on-device.
             </p>
 
-            {/* Error Message if Denied */}
+            {/* Error Message if Denied or Initialization Failure */}
             {engineError && (
               <div className="w-full max-w-sm mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-300 flex items-start gap-2.5 text-left">
                 <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
                 <div className="flex flex-col gap-1">
-                  <strong className="text-rose-200">Permission Required</strong>
+                  <strong className="text-rose-200">
+                    {engineError.toLowerCase().includes('permission') || engineError.toLowerCase().includes('denied')
+                      ? 'Camera Access Required'
+                      : 'Vision Engine Notice'}
+                  </strong>
                   <span>{engineError}</span>
                 </div>
               </div>
@@ -192,7 +196,7 @@ export const CameraStage = ({
               ) : engineError ? (
                 <>
                   <RefreshCw className="w-4 h-4" />
-                  <span>Retry Camera Access</span>
+                  <span>Retry Session</span>
                 </>
               ) : (
                 <>

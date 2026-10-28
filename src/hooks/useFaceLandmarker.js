@@ -1,8 +1,15 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 
-const WASM_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
-const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+const WASM_SOURCES = [
+  'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm',
+  'https://unpkg.com/@mediapipe/tasks-vision@0.10.14/wasm',
+];
+
+const MODEL_SOURCES = [
+  'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
+  'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/face_landmarker.task',
+];
 
 // Key Landmark indices for MediaPipe Face Mesh
 const LEFT_EYE = [33, 160, 158, 133, 153, 144];
@@ -72,46 +79,87 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
   const lastStateTickTime = useRef(performance.now());
   const lastUIUpdateTime = useRef(performance.now());
 
-  // Initialize MediaPipe FaceLandmarker with GPU / CPU delegate fallback
-  useEffect(() => {
-    let active = true;
+  const loadingPromiseRef = useRef(null);
 
-    async function init() {
+  // Robust loader trying multiple CDN mirrors and GPU/CPU delegates
+  const loadLandmarkerInstance = useCallback(async () => {
+    let lastError = null;
+
+    for (const wasmUrl of WASM_SOURCES) {
       try {
-        const fileset = await FilesetResolver.forVisionTasks(WASM_URL);
-        for (const delegate of ['GPU', 'CPU']) {
-          try {
-            const lm = await FaceLandmarker.createFromOptions(fileset, {
-              baseOptions: { modelAssetPath: MODEL_URL, delegate },
-              runningMode: 'VIDEO',
-              numFaces: 1,
-              outputFaceBlendshapes: true,
-              outputFacialTransformationMatrixes: true,
-            });
-            if (active) {
-              landmarkerRef.current = lm;
-              setIsReady(true);
+        const fileset = await FilesetResolver.forVisionTasks(wasmUrl);
+        for (const modelUrl of MODEL_SOURCES) {
+          for (const delegate of ['GPU', 'CPU']) {
+            try {
+              const lm = await FaceLandmarker.createFromOptions(fileset, {
+                baseOptions: { modelAssetPath: modelUrl, delegate },
+                runningMode: 'VIDEO',
+                numFaces: 1,
+                outputFaceBlendshapes: true,
+                outputFacialTransformationMatrixes: true,
+              });
+              return lm;
+            } catch (delErr) {
+              lastError = delErr;
+              console.warn(`Delegate ${delegate} attempt failed with ${modelUrl}:`, delErr);
             }
-            break;
-          } catch (e) {
-            if (delegate === 'CPU') throw e;
           }
         }
-      } catch (err) {
-        console.error('Failed to initialize FaceLandmarker:', err);
-        if (active) {
-          setEngineError('Failed to load on-device vision model.');
-        }
+      } catch (wasmErr) {
+        lastError = wasmErr;
+        console.warn(`WASM source failed at ${wasmUrl}:`, wasmErr);
       }
     }
+    throw lastError || new Error('Failed to load on-device vision model.');
+  }, []);
 
-    init();
+  const ensureModelLoaded = useCallback(async () => {
+    if (landmarkerRef.current) return landmarkerRef.current;
+    if (loadingPromiseRef.current) return loadingPromiseRef.current;
+
+    loadingPromiseRef.current = (async () => {
+      try {
+        setEngineStatus('loading-model');
+        const lm = await loadLandmarkerInstance();
+        landmarkerRef.current = lm;
+        setIsReady(true);
+        setEngineError(null);
+        setEngineStatus('idle');
+        return lm;
+      } catch (err) {
+        console.error('Model load failure:', err);
+        setEngineError('Failed to load on-device vision model. Please check network connection and click Retry.');
+        setEngineStatus('error');
+        throw err;
+      } finally {
+        loadingPromiseRef.current = null;
+      }
+    })();
+
+    return loadingPromiseRef.current;
+  }, [loadLandmarkerInstance]);
+
+  // Silently preload in background without surfacing a red error box on initial page load
+  useEffect(() => {
+    let active = true;
+    ensureModelLoaded()
+      .then(() => {
+        if (active) setEngineError(null);
+      })
+      .catch((err) => {
+        console.warn('Silent initial background preload failed, will retry on Start:', err);
+        if (active) {
+          // Do not show an alarming red error to user before they even click Start!
+          setEngineError(null);
+          setEngineStatus('idle');
+        }
+      });
 
     return () => {
       active = false;
       landmarkerRef.current?.close();
     };
-  }, []);
+  }, [ensureModelLoaded]);
 
   // Posture overlay HUD drawing function (executed directly on 2D canvas at 60 FPS)
   const drawHud = useCallback(
@@ -516,14 +564,10 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
         }
       }
 
-      // Check model readiness
+      // Check model readiness and load if not yet ready
       if (!landmarkerRef.current) {
         setEngineStatus('loading-model');
-        let waited = 0;
-        while (!landmarkerRef.current && waited < 12000) {
-          await new Promise((r) => setTimeout(r, 100));
-          waited += 100;
-        }
+        await ensureModelLoaded();
       }
 
       isTrackingRef.current = true;
@@ -548,7 +592,7 @@ export function useFaceLandmarker(videoRef, hudCanvasRef, hudEnabled, onStateTic
       isTrackingRef.current = false;
       throw err;
     }
-  }, [videoRef, loop]);
+  }, [videoRef, loop, ensureModelLoaded]);
 
   const stop = useCallback(() => {
     isTrackingRef.current = false;

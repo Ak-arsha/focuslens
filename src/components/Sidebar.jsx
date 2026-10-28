@@ -33,7 +33,8 @@ export const Sidebar = ({
   onOpenPrivacy,
   onOpenShortcuts,
   onOpenCommandPalette,
-  onOpenGuideBot
+  onOpenGuideBot,
+  onOpenWelcome
 }) => {
   const navItems = [
     { id: 'studio', label: 'Live Studio', icon: Video, badge: isTracking ? `${fps} FPS` : null },
@@ -65,7 +66,11 @@ export const Sidebar = ({
     <aside className="w-64 shrink-0 flex flex-col justify-between border-r border-white/5 dark:border-white/5 bg-[var(--bg-sidebar)] p-3 text-xs select-none">
       {/* Brand & Workspace Header */}
       <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between px-2 py-1.5">
+        <div
+          onClick={onOpenWelcome}
+          className="flex items-center justify-between px-2 py-1.5 cursor-pointer hover:opacity-85 transition-opacity"
+          title="Return to Welcome Screen"
+        >
           <div className="flex items-center gap-2.5">
             <div className="relative w-7 h-7 flex items-center justify-center">
               <svg viewBox="0 0 32 32" className="w-full h-full">

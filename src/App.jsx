@@ -15,6 +15,7 @@ import { AboutModal } from './components/AboutModal';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { CommandPalette } from './components/CommandPalette';
 import { AIGuideBot } from './components/AIGuideBot';
+import { BotWelcomeScreen } from './components/BotWelcomeScreen';
 import { ThreeHeadVisualizer } from './components/ThreeHeadVisualizer';
 import { useFaceLandmarker } from './hooks/useFaceLandmarker';
 import { playChime } from './utils/audio';
@@ -48,6 +49,9 @@ const TARGET_SCORES = { focused: 100, distracted: 38, drowsy: 10, idle: 80 };
 export function App() {
   const videoRef = useRef(null);
   const hudCanvasRef = useRef(null);
+
+  // Addressal First Experience
+  const [hasEnteredCockpit, setHasEnteredCockpit] = useState(false);
 
   // Active Workspace Tab ('studio' | 'biometrics' | 'soundscapes' | 'timeline' | 'archive')
   const [activeTab, setActiveTab] = useState('studio');
@@ -446,8 +450,31 @@ export function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-heading)] flex flex-col md:flex-row font-sans transition-colors duration-200 overflow-x-hidden">
-      {/* Toast Notification */}
+    <>
+      {/* 1. Addressal Screen of LensBot on Initial Visit */}
+      {!hasEnteredCockpit && (
+        <BotWelcomeScreen
+          onEnterCockpit={(startCam) => {
+            setHasEnteredCockpit(true);
+            if (startCam) {
+              handleStartSession();
+            }
+          }}
+          onStartInteractiveTour={() => {
+            setHasEnteredCockpit(true);
+            setIsGuideBotOpen(true);
+          }}
+          theme={theme}
+          onToggleTheme={toggleTheme}
+        />
+      )}
+
+      {/* 2. Main Focus Cockpit (Kept mounted in DOM so video/canvas refs stay active) */}
+      <div
+        className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-heading)] flex flex-col md:flex-row font-sans transition-colors duration-200 overflow-x-hidden"
+        style={{ display: hasEnteredCockpit ? 'flex' : 'none' }}
+      >
+        {/* Toast Notification */}
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-xl bg-slate-900/95 text-white border border-emerald-500/40 shadow-2xl text-xs font-semibold flex items-center gap-2 backdrop-blur-md animate-in slide-in-from-bottom-2 duration-150">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
@@ -476,6 +503,7 @@ export function App() {
           onOpenShortcuts={() => setIsShortcutsOpen(true)}
           onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
           onOpenGuideBot={() => setIsGuideBotOpen(true)}
+          onOpenWelcome={() => setHasEnteredCockpit(false)}
         />
       </div>
 
@@ -516,6 +544,10 @@ export function App() {
               onOpenGuideBot={() => {
                 setIsMobileSidebarOpen(false);
                 setIsGuideBotOpen(true);
+              }}
+              onOpenWelcome={() => {
+                setIsMobileSidebarOpen(false);
+                setHasEnteredCockpit(false);
               }}
             />
             <button
@@ -902,6 +934,7 @@ export function App() {
         onNavigateTab={(tab) => setActiveTab(tab)}
         soundFxEnabled={soundFxEnabled}
       />
-    </div>
+      </div>
+    </>
   );
 }
