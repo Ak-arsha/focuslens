@@ -15,7 +15,8 @@ import {
   Share2,
   ShieldCheck,
   Info,
-  X
+  X,
+  Bot
 } from 'lucide-react';
 
 export const CommandPalette = ({
@@ -37,7 +38,8 @@ export const CommandPalette = ({
   onExportJson,
   onOpenShareCard,
   onOpenPrivacy,
-  onOpenAbout
+  onOpenAbout,
+  onOpenGuideBot
 }) => {
   const [query, setQuery] = useState('');
   const inputRef = useRef(null);
@@ -52,6 +54,16 @@ export const CommandPalette = ({
   if (!isOpen) return null;
 
   const commands = [
+    {
+      id: 'guide',
+      icon: Bot,
+      title: 'Open LensBot AI Step-by-Step Guide & Terminology',
+      shortcut: 'G',
+      action: () => {
+        if (onOpenGuideBot) onOpenGuideBot();
+        onClose();
+      }
+    },
     {
       id: 'camera',
       icon: Camera,

@@ -14,6 +14,7 @@ import { PrivacyModal } from './components/PrivacyModal';
 import { AboutModal } from './components/AboutModal';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { CommandPalette } from './components/CommandPalette';
+import { AIGuideBot } from './components/AIGuideBot';
 import { ThreeHeadVisualizer } from './components/ThreeHeadVisualizer';
 import { useFaceLandmarker } from './hooks/useFaceLandmarker';
 import { playChime } from './utils/audio';
@@ -37,7 +38,8 @@ import {
   Music,
   BarChart3,
   Archive,
-  Video
+  Video,
+  Bot
 } from 'lucide-react';
 
 const THEME_KEY = 'focuslens:theme';
@@ -76,6 +78,7 @@ export function App() {
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [isGuideBotOpen, setIsGuideBotOpen] = useState(false);
   const [isBreakOpen, setIsBreakOpen] = useState(false);
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const [sessionSummaryData, setSessionSummaryData] = useState(null);
@@ -472,6 +475,7 @@ export function App() {
           onOpenPrivacy={() => setIsPrivacyOpen(true)}
           onOpenShortcuts={() => setIsShortcutsOpen(true)}
           onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+          onOpenGuideBot={() => setIsGuideBotOpen(true)}
         />
       </div>
 
@@ -508,6 +512,10 @@ export function App() {
               onOpenCommandPalette={() => {
                 setIsMobileSidebarOpen(false);
                 setIsCommandPaletteOpen(true);
+              }}
+              onOpenGuideBot={() => {
+                setIsMobileSidebarOpen(false);
+                setIsGuideBotOpen(true);
               }}
             />
             <button
@@ -606,6 +614,16 @@ export function App() {
                 <kbd className="px-1 py-0.2 rounded bg-rose-500/20 text-[9px] font-mono">E</kbd>
               </button>
             )}
+
+            {/* LensBot AI Guide Trigger */}
+            <button
+              onClick={() => setIsGuideBotOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg linear-inset text-xs text-emerald-400 hover:border-emerald-500/40 transition-colors"
+              title="Open LensBot AI Step-by-Step Guide & Terminology"
+            >
+              <Bot className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden sm:inline font-semibold">AI Guide</span>
+            </button>
 
             {/* Command Palette Trigger */}
             <button
@@ -873,6 +891,16 @@ export function App() {
         onOpenShareCard={() => showToast('Share summary generated.')}
         onOpenPrivacy={() => setIsPrivacyOpen(true)}
         onOpenAbout={() => setIsAboutOpen(true)}
+        onOpenGuideBot={() => setIsGuideBotOpen(true)}
+      />
+
+      {/* LensBot Onboarding & Terminology AI Guide */}
+      <AIGuideBot
+        isOpen={isGuideBotOpen}
+        onOpen={() => setIsGuideBotOpen(true)}
+        onClose={() => setIsGuideBotOpen(false)}
+        onNavigateTab={(tab) => setActiveTab(tab)}
+        soundFxEnabled={soundFxEnabled}
       />
     </div>
   );

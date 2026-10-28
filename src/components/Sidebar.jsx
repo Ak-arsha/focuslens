@@ -14,7 +14,9 @@ import {
   ShieldCheck,
   Github,
   Command,
-  Eye
+  Eye,
+  Bot,
+  Sparkles
 } from 'lucide-react';
 
 export const Sidebar = ({
@@ -30,7 +32,8 @@ export const Sidebar = ({
   onCalibrate,
   onOpenPrivacy,
   onOpenShortcuts,
-  onOpenCommandPalette
+  onOpenCommandPalette,
+  onOpenGuideBot
 }) => {
   const navItems = [
     { id: 'studio', label: 'Live Studio', icon: Video, badge: isTracking ? `${fps} FPS` : null },
@@ -107,6 +110,20 @@ export const Sidebar = ({
             <span>Search commands...</span>
           </div>
           <kbd className="px-1.5 py-0.5 rounded bg-black/20 dark:bg-white/10 text-[9px] font-mono">Cmd K</kbd>
+        </button>
+
+        {/* AI Guide Bot Launcher */}
+        <button
+          onClick={onOpenGuideBot}
+          className="linear-inset px-2.5 py-2 rounded-lg flex items-center justify-between text-[11px] text-emerald-400 hover:border-emerald-500/40 transition-colors group"
+        >
+          <div className="flex items-center gap-2">
+            <Bot className="w-3.5 h-3.5 text-emerald-400 group-hover:animate-bounce" />
+            <span className="font-semibold text-slate-200 group-hover:text-emerald-400 transition-colors">LensBot AI Guide</span>
+          </div>
+          <span className="px-1.5 py-0.2 rounded text-[9px] font-mono uppercase font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+            Tour &amp; FAQ
+          </span>
         </button>
 
         {/* Linear Sidebar Navigation Items */}
