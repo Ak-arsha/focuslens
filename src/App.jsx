@@ -657,6 +657,19 @@ export function App() {
               <span className="hidden sm:inline font-semibold">AI Guide</span>
             </button>
 
+            {/* Theme Toggle Button in Header */}
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-lg linear-btn-secondary"
+              title="Toggle Dark / Light Theme (Press T)"
+            >
+              {theme === 'dark' ? (
+                <Sun className="w-4 h-4 text-amber-400" />
+              ) : (
+                <Moon className="w-4 h-4 text-slate-700" />
+              )}
+            </button>
+
             {/* Command Palette Trigger */}
             <button
               onClick={() => setIsCommandPaletteOpen(true)}

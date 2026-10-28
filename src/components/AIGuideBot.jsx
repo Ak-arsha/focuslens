@@ -19,7 +19,8 @@ import {
   ArrowRight,
   CheckCircle2,
   Minimize2,
-  Maximize2
+  Maximize2,
+  GripVertical
 } from 'lucide-react';
 import { playChime } from '../utils/audio';
 
@@ -39,6 +40,82 @@ export const AIGuideBot = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [hasGreeted, setHasGreeted] = useState(false);
 
+  // Position and Draggability
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [dialogPosition, setDialogPosition] = useState({ x: 0, y: 0 });
+  const [isPillDismissed, setIsPillDismissed] = useState(false);
+  const dragDataRef = useRef({ startX: 0, startY: 0, originX: 0, originY: 0, moved: false });
+  const dialogDragDataRef = useRef({ startX: 0, startY: 0, originX: 0, originY: 0, moved: false });
+
+  // Floating Pill Dragging
+  const handlePillPointerDown = (e) => {
+    if (e.target.closest('button.close-btn')) return;
+    dragDataRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      originX: position.x,
+      originY: position.y,
+      moved: false,
+    };
+
+    const handlePointerMove = (moveEvent) => {
+      const dx = moveEvent.clientX - dragDataRef.current.startX;
+      const dy = moveEvent.clientY - dragDataRef.current.startY;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+        dragDataRef.current.moved = true;
+      }
+      setPosition({
+        x: dragDataRef.current.originX + dx,
+        y: dragDataRef.current.originY + dy,
+      });
+    };
+
+    const handlePointerUp = () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+  };
+
+  const handlePillClick = () => {
+    if (dragDataRef.current.moved) return;
+    handleOpen();
+  };
+
+  // Dialog Dragging (via Header)
+  const handleDialogHeaderPointerDown = (e) => {
+    if (e.target.closest('button')) return;
+    dialogDragDataRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      originX: dialogPosition.x,
+      originY: dialogPosition.y,
+      moved: false,
+    };
+
+    const handlePointerMove = (moveEvent) => {
+      const dx = moveEvent.clientX - dialogDragDataRef.current.startX;
+      const dy = moveEvent.clientY - dialogDragDataRef.current.startY;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+        dialogDragDataRef.current.moved = true;
+      }
+      setDialogPosition({
+        x: dialogDragDataRef.current.originX + dx,
+        y: dialogDragDataRef.current.originY + dy,
+      });
+    };
+
+    const handlePointerUp = () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+  };
+
   // Auto-prompt subtly on first load
   useEffect(() => {
     const tourCompleted = localStorage.getItem('focuslens:tour_completed');
@@ -54,6 +131,7 @@ export const AIGuideBot = ({
   }, [hasGreeted, soundFxEnabled, externalOnOpen]);
 
   const handleOpen = () => {
+    setIsPillDismissed(false);
     if (externalOnOpen) externalOnOpen();
     else setInternalIsOpen(true);
     setIsMinimized(false);
@@ -295,17 +373,23 @@ export const AIGuideBot = ({
 
   return (
     <>
-      {/* Floating Bot Launcher Avatar (Bottom Left) */}
-      {!isOpen && (
-        <button
-          onClick={handleOpen}
-          className="fixed bottom-6 left-6 z-40 flex items-center gap-2.5 px-3.5 py-2.5 rounded-full bg-slate-900/90 hover:bg-slate-800 text-white border border-emerald-500/40 shadow-2xl backdrop-blur-md transition-all transform hover:scale-105 group select-none"
-          title="Open FocusLens AI Guide & Terminology Walkthrough"
+      {/* Floating Bot Launcher Avatar (Bottom Right, Draggable & Dismissible) */}
+      {!isOpen && !isPillDismissed && (
+        <div
+          onPointerDown={handlePillPointerDown}
+          onClick={handlePillClick}
+          style={{
+            transform: `translate3d(${position.x}px, ${position.y}px, 0)`,
+            touchAction: 'none',
+          }}
+          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 px-3 py-2 rounded-full bg-slate-900/95 hover:bg-slate-800 text-white border border-emerald-500/40 shadow-2xl backdrop-blur-md transition-shadow cursor-grab active:cursor-grabbing group select-none"
+          title="Drag to reposition anywhere, click to open LensBot Guide"
         >
+          <GripVertical className="w-3.5 h-3.5 text-slate-500 group-hover:text-emerald-400 cursor-grab" />
           <div className="relative w-7 h-7 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 group-hover:bg-emerald-500 group-hover:text-slate-950 transition-colors">
             <Bot className="w-4 h-4" />
-            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping opacity-75" />
-            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-400" />
+            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 animate-ping opacity-75" />
+            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400" />
           </div>
           <div className="flex flex-col text-left">
             <div className="flex items-center gap-1.5">
@@ -316,21 +400,40 @@ export const AIGuideBot = ({
             </div>
             <span className="text-[10px] linear-text-muted">Interactive Tour &amp; Glossary</span>
           </div>
-        </button>
+
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsPillDismissed(true);
+            }}
+            className="close-btn p-1 ml-0.5 rounded-full text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+            title="Dismiss floating pill (reopen from sidebar anytime)"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        </div>
       )}
 
-      {/* Main AI Bot Guide Panel */}
+      {/* Main AI Bot Guide Panel (Draggable Header, Positioned Bottom-Right) */}
       {isOpen && (
         <div
-          className={`fixed z-50 transition-all duration-200 select-none ${
+          style={{
+            transform: `translate3d(${dialogPosition.x}px, ${dialogPosition.y}px, 0)`,
+          }}
+          className={`fixed z-50 transition-all duration-150 select-none ${
             isMinimized
-              ? 'bottom-6 left-6 w-80'
-              : 'bottom-6 left-6 right-6 sm:right-auto sm:w-[460px] max-h-[88vh]'
+              ? 'bottom-6 right-6 w-80'
+              : 'bottom-6 right-6 left-6 sm:left-auto sm:w-[460px] max-h-[88vh]'
           } flex flex-col rounded-2xl linear-panel border border-emerald-500/40 shadow-2xl backdrop-blur-2xl overflow-hidden animate-in fade-in zoom-in-95`}
         >
-          {/* Top Header Bar */}
-          <div className="p-3.5 border-b border-white/5 flex items-center justify-between bg-black/40">
-            <div className="flex items-center gap-2.5">
+          {/* Top Header Bar (Draggable) */}
+          <div
+            onPointerDown={handleDialogHeaderPointerDown}
+            className="p-3.5 border-b border-white/5 flex items-center justify-between bg-black/40 cursor-grab active:cursor-grabbing"
+            title="Drag header to move guide window"
+          >
+            <div className="flex items-center gap-2">
+              <GripVertical className="w-4 h-4 text-slate-500 hover:text-emerald-400" />
               <div className="relative w-8 h-8 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
                 <Bot className="w-4 h-4" />
                 <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-emerald-400" />
